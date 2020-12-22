@@ -59,7 +59,7 @@ configurable_parameters = [{'name': 'camera_name',                  'default': '
                            {'name': 'pointcloud_texture_stream',    'default': 'RS2_STREAM_COLOR', 'description': 'testure stream for pointcloud'},                           
                            {'name': 'pointcloud_texture_index',     'default': '0', 'description': 'testure stream index for pointcloud'},                           
                            {'name': 'enable_sync',                  'default': 'false', 'description': ''},                           
-                           {'name': 'align_depth',                  'default': 'false', 'description': ''},                           
+                           {'name': 'align_depth',                  'default': 'true', 'description': ''},                           
                            {'name': 'filters',                      'default': '', 'description': ''},                           
                            {'name': 'clip_distance',                'default': '-2.', 'description': ''},                           
                            {'name': 'linear_accel_cov',             'default': '0.01', 'description': ''},                           
