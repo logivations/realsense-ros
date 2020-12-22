@@ -67,7 +67,12 @@ configurable_parameters = [{'name': 'camera_name',                  'default': '
                            {'name': 'allow_no_texture_points',      'default': 'false', 'description': ''},                           
                            {'name': 'calib_odom_file',              'default': '', 'description': ''},                           
                            {'name': 'topic_odom_in',                'default': '', 'description': 'topic for T265 wheel odometry'},                           
-                           {'name': 'base_frame_id',                'default': '', 'description': 'Base frame id for cameras'},
+                           {'name': 'base_frame_id',                  'default': 'camera_link', 'description': 'Base frame id for cameras'},                           
+                           {'name': 'color_frame_id',                 'default': 'camera_color_frame', 'description': 'Color frame id for cameras'},                           
+                           {'name': 'color_optical_frame_id',         'default': 'camera_color_optical_frame', 'description': 'Color optical frame id for cameras'},                           
+                           {'name': 'aligned_depth_to_color_frame_id','default': 'camera_aligned_depth_to_color_frame', 'description': 'Color aligned depth frame id for cameras'},                           
+                           {'name': 'depth_frame_id',                 'default': 'camera_depth_frame', 'description': 'Color frame id for cameras'},                           
+                           {'name': 'depth_optical_frame_id',         'default': 'camera_depth_optical_frame', 'description': 'Color optical frame id for cameras'},
                           ]
 
 def declare_configurable_parameters(parameters):
