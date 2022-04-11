@@ -272,6 +272,11 @@ namespace realsense2_camera
         bool _allow_no_texture_points;
         bool _ordered_pc;
 
+        double _publish_fps;
+        double _color_fps;
+        unsigned int _frame_counter = 1;
+        unsigned int _frames_to_skip = 0;
+
         double _linear_accel_cov;
         double _angular_velocity_cov;
         bool  _hold_back_imu_for_frames;
