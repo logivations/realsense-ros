@@ -923,8 +923,8 @@ void BaseRealSenseNode::getParameters()
         setNgetNodeParameter(_enable[stream], param_name, true);
     }
 
-    setNgetNodeParameter(_publish_fps, "publish_fps", -1.0);
-    setNgetNodeParameter(_color_fps, "color_fps", -1.0);
+    setNgetNodeParameter(_publish_fps, "publish_fps", 2.0);
+    setNgetNodeParameter(_color_fps, "color_fps", 6.0);
     _frames_to_skip = _color_fps / _publish_fps;
 
     if (_enable[DEPTH]) {
