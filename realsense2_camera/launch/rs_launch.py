@@ -112,6 +112,7 @@ def generate_launch_description():
                 parameters=[set_configurable_parameters(configurable_parameters)
                             ],
                 output='screen',
+                respawn=True,
                 arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
                 emulate_tty=True,
                 ),
@@ -125,6 +126,7 @@ def generate_launch_description():
                             , PythonExpression([LaunchConfiguration("config_file")])
                             ],
                 output='screen',
+                respawn=True,
                 arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
                 emulate_tty=True,
                 ),
