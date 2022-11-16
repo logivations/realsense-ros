@@ -97,7 +97,7 @@ void BaseRealSenseNode::setAvailableSensors()
     ROS_INFO_STREAM("Device Product ID: 0x" << pid);
 
     ROS_INFO_STREAM("Sync Mode: " << ((_sync_frames)?"On":"Off"));
-
+    
     std::function<void(rs2::frame)> frame_callback_function = [this](rs2::frame frame){
         bool is_filter(_filters.end() != find_if(_filters.begin(), _filters.end(), [](std::shared_ptr<NamedFilter> f){return (f->is_enabled()); }));
         if (_sync_frames || is_filter)
@@ -135,17 +135,17 @@ void BaseRealSenseNode::setAvailableSensors()
             sensor.is<rs2::fisheye_sensor>())
         {
             ROS_DEBUG_STREAM("Set " << module_name << " as VideoSensor.");
-            rosSensor = std::make_unique<RosSensor>(sensor, _parameters, frame_callback_function, update_sensor_func, hardware_reset_func, _diagnostics_updater, _logger, _use_intra_process);
+            rosSensor = std::make_unique<RosSensor>(sensor, _parameters, frame_callback_function, update_sensor_func, hardware_reset_func, _diagnostics_updater, _logger, _use_intra_process, _dev.is<playback>());
         }
         else if (sensor.is<rs2::motion_sensor>())
         {
             ROS_DEBUG_STREAM("Set " << module_name << " as ImuSensor.");
-            rosSensor = std::make_unique<RosSensor>(sensor, _parameters, imu_callback_function, update_sensor_func, hardware_reset_func, _diagnostics_updater, _logger);
+            rosSensor = std::make_unique<RosSensor>(sensor, _parameters, imu_callback_function, update_sensor_func, hardware_reset_func, _diagnostics_updater, _logger, false, _dev.is<playback>());
         }
         else if (sensor.is<rs2::pose_sensor>())
         {
             ROS_DEBUG_STREAM("Set " << module_name << " as PoseSensor.");
-            rosSensor = std::make_unique<RosSensor>(sensor, _parameters, multiple_message_callback_function, update_sensor_func, hardware_reset_func, _diagnostics_updater, _logger);
+            rosSensor = std::make_unique<RosSensor>(sensor, _parameters, multiple_message_callback_function, update_sensor_func, hardware_reset_func, _diagnostics_updater, _logger, false, _dev.is<playback>());
         }
         else
         {
@@ -296,7 +296,12 @@ void BaseRealSenseNode::updateSensors()
             std::vector<stream_profile> wanted_profiles;
 
             bool is_profile_changed(sensor->getUpdatedProfiles(wanted_profiles));
-            if (is_profile_changed || _is_align_depth_changed)
+            bool is_video_sensor = (sensor->is<rs2::depth_sensor>() || sensor->is<rs2::color_sensor>() || sensor->is<rs2::fisheye_sensor>());          
+
+            // do all updates if profile has been changed, or if the align depth filter status has been changed
+            // and we are on a video sensor. TODO: explore better options to monitor and update changes
+            // without resetting the whole sensors and topics.
+            if (is_profile_changed || (_is_align_depth_changed && is_video_sensor))
             {
                 std::vector<stream_profile> active_profiles = sensor->get_active_streams();
                 if(is_profile_changed)

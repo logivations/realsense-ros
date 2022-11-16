@@ -3,15 +3,18 @@ These are packages for using Intel RealSense cameras (D400 and L500 series, SR30
 
 This version supports ROS2 Dashing, Eloquent, Foxy, Galactic and Rolling.
 
-LibRealSense supported version: v2.50.0 (see [realsense2_camera release notes](https://github.com/IntelRealSense/realsense-ros/releases))
+LibRealSense supported version: v2.51.1 (see [realsense2_camera release notes](https://github.com/IntelRealSense/realsense-ros/releases))
 
-## Please notice: if you are moving from RealSense [ROS2 branch](https://github.com/IntelRealSense/realsense-ros/tree/ros2) to ROS2-beta:
+
+## For LibRS ROS1 Wrapper please refer to [ROS1-legacy branch](https://github.com/IntelRealSense/realsense-ros/tree/ros1-legacy)
+
+## Please notice: if you are moving from RealSense [ROS2-legacy branch](https://github.com/IntelRealSense/realsense-ros/tree/ros2-legacy) to ROS2-development:
 - **Changed Parameters**:
     - **"stereo_module"**, **"l500_depth_sensor"** are replaced by **"depth_module"**
     - For video streams: **\<module>.profile** replaces **\<stream>_width**, **\<stream>_height**, **\<stream>_fps**
-        - **ROS2 (Old)**:
+        - **ROS2-legacy (Old)**:
           - ros2 launch realsense2_camera rs_launch.py depth_width:=640 depth_height:=480 depth_fps:=30.0 infra1_width:=640 infra1_height:=480 infra1_fps:=30.0
-        - **ROS2-beta (New)**:
+        - **ROS2-development (New)**:
           - ros2 launch realsense2_camera rs_launch.py depth_module.profile:=640x480x30
     - Removed paramets **\<stream>_frame_id**, **\<stream>_optical_frame_id**. frame_ids are now defined by camera_name
     - **"filters"** is removed. All filters (or post-processing blocks) are enabled/disabled using **"\<filter>.enable"**
@@ -28,24 +31,25 @@ LibRealSense supported version: v2.50.0 (see [realsense2_camera release notes](h
 ## Installation Instructions
 
    ### Step 1: Install the ROS2 distribution
- - #### Ubuntu 18.04 : 
-   - [ROS2 Dashing](https://docs.ros.org/en/dashing/Installation/Ubuntu-Install-Debians.html)
-   - [ROS2 Eloquent](https://docs.ros.org/en/eloquent/Installation/Linux-Install-Debians.html)
+ - #### Ubuntu 22.04:
+   - [ROS2 Humble](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html)
  - #### Ubuntu 20.04: 
    - [ROS2 Foxy](https://docs.ros.org/en/foxy/Installation/Ubuntu-Install-Debians.html)
    - [ROS2 Galactic](https://docs.ros.org/en/galactic/Installation/Ubuntu-Install-Debians.html)
-   - [ROS2 Rolling](https://docs.ros.org/en/rolling/Installation/Ubuntu-Install-Debians.html)
+ - #### Ubuntu 18.04 : 
+   - [ROS2 Dashing](https://docs.ros.org/en/dashing/Installation/Ubuntu-Install-Debians.html)
+   - [ROS2 Eloquent](https://docs.ros.org/en/eloquent/Installation/Linux-Install-Debians.html)
 
 
 ### Step 2: Install the latest Intel&reg; RealSense&trade; SDK 2.0
 
-- #### Option 1: Install librealsense2 debian package
+- #### Option 1: Install librealsense2 debian package (Not supported in Ubuntu 22.04 yet)
    - Jetson users - use the [Jetson Installation Guide](https://github.com/IntelRealSense/librealsense/blob/master/doc/installation_jetson.md)
    - Otherwise, install from [Linux Debian Installation Guide](https://github.com/IntelRealSense/librealsense/blob/master/doc/distribution_linux.md#installing-the-packages)
       - In this case treat yourself as a developer: make sure to follow the instructions to also install librealsense2-dev and librealsense2-dkms packages
 
 - #### Option 2: Build from source
-  - Download the latest [Intel&reg; RealSense&trade; SDK 2.0](https://github.com/IntelRealSense/librealsense/releases/tag/v2.50.0)
+  - Download the latest [Intel&reg; RealSense&trade; SDK 2.0](https://github.com/IntelRealSense/librealsense/releases/tag/v2.51.1)
   - Follow the instructions under [Linux Installation](https://github.com/IntelRealSense/librealsense/blob/master/doc/installation.md)
 
 
@@ -57,7 +61,7 @@ LibRealSense supported version: v2.50.0 (see [realsense2_camera release notes](h
       ```
    - Clone the latest ROS2 Intel&reg; RealSense&trade;  wrapper from [here](https://github.com/IntelRealSense/realsense-ros.git) into '~/ros2_ws/src/'
       ```bashrc
-      git clone https://github.com/IntelRealSense/realsense-ros.git -b ros2-beta
+      git clone https://github.com/IntelRealSense/realsense-ros.git -b ros2-development
       cd ~/ros2_ws
       ```
 ### Step 4: Install dependencies
@@ -75,7 +79,7 @@ LibRealSense supported version: v2.50.0 (see [realsense2_camera release notes](h
 
 ### Step 6: Terminal environment
    ```bash
-   ROS_DISTRO=<YOUR_SYSTEM_ROS_DISTRO>  # set your ROS_DISTRO: galactic, foxy, eloquent, dashing
+   ROS_DISTRO=<YOUR_SYSTEM_ROS_DISTRO>  # set your ROS_DISTRO: humble, galactic, foxy, eloquent, dashing
    source /opt/ros/$ROS_DISTRO/setup.bash
    cd ~/ros2_ws
    . install/local_setup.bash
@@ -215,7 +219,10 @@ For setting a new value for a parameter use `ros2 param set <node> <parameter_na
 - **device_type**: will attach to a device whose name includes the given *device_type* regular expression pattern. Default, ignore device type. For example, device_type:=d435 will match d435 and d435i. device_type=d435(?!i) will match d435 but not d435i.
 - **reconnect_timeout**: When the driver cannot connect to the device try to reconnect after this timeout (in seconds).
 - **wait_for_device_timeout**: If the specified device is not found, will wait *wait_for_device_timeout* seconds before exits. Defualt, *wait_for_device_timeout < 0*, will wait indefinitely.
-- **rosbag_filename**: Will publish topics from rosbag file.
+- **rosbag_filename**: Publish topics from rosbag file. There are two ways for loading rosbag file:
+   * Command line - ```ros2 run realsense2_camera realsense2_camera_node -p rosbag_filename:="/full/path/to/rosbag.bag"```
+   * Launch file - set ```rosbag_filename``` parameter with rosbag full path (see ```realsense2_camera/launch/rs_launch.py``` as reference) 
+
 - **initial_reset**: On occasions the device was not closed properly and due to firmware issues needs to reset. If set to true, the device will reset prior to usage.
 
 - ***<stream_name>*_frame_id**, ***<stream_name>*_optical_frame_id**, **aligned_depth_to_*<stream_name>*_frame_id**: Specify the different frame_id for the different frames. Especially important when using multiple cameras.
