@@ -11,9 +11,8 @@
 
 
 [![rolling][rolling-badge]][rolling]
+[![iron][iron-badge]][iron]
 [![humble][humble-badge]][humble]
-[![foxy][foxy-badge]][foxy]
-[![galactic][galactic-badge]][galactic]
 [![ubuntu22][ubuntu22-badge]][ubuntu22]
 [![ubuntu20][ubuntu20-badge]][ubuntu20]
 
@@ -33,6 +32,7 @@
      * [TF from coordinate A to coordinate B](#tfs)
      * [Extrinsics from sensor A to sensor B](#extrinsics)
      * [Topics](#topics)
+     * [RGBD Topic](#rgbd)
      * [Metadata Topic](#metadata)
      * [Post-Processing Filters](#filters)
      * [Available Services](#services)
@@ -89,10 +89,8 @@
   </summary>
   
 - #### Ubuntu 22.04:
+  - [ROS2 Iron](https://docs.ros.org/en/iron/Installation/Ubuntu-Install-Debians.html)
   - [ROS2 Humble](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debians.html)
-- #### Ubuntu 20.04: 
-  - [ROS2 Foxy](https://docs.ros.org/en/foxy/Installation/Ubuntu-Install-Debians.html)
-  - [ROS2 Galactic](https://docs.ros.org/en/galactic/Installation/Ubuntu-Install-Debians.html) (deprecated)
     
 </details>
   
@@ -156,7 +154,7 @@
 
   -  Source environment
    ```bash
-   ROS_DISTRO=<YOUR_SYSTEM_ROS_DISTRO>  # set your ROS_DISTRO: humble, galactic, foxy
+   ROS_DISTRO=<YOUR_SYSTEM_ROS_DISTRO>  # set your ROS_DISTRO: iron, humble
    source /opt/ros/$ROS_DISTRO/setup.bash
    cd ~/ros2_ws
    . install/local_setup.bash
@@ -188,16 +186,6 @@
 <h3 id="parameters">
   Parameters
 <h3>
-  
-### Sensor Parameters:
-- Each sensor has a unique set of parameters.
-- Video sensors, such as depth_module or rgb_camera have, at least, the 'profile' parameter.</br>
-  - The profile parameter is a string of the following format: \<width>X\<height>X\<fps> (The deviding character can be X, x or ",". Spaces are ignored.)
-  - For example: ```depth_module.profile:=640x480x30```
-- Since infra1, infra2 and depth are all streams of the depth_module, their width, height and fps are defined by their common sensor.
-- If the specified combination of parameters is not available by the device, the default configuration will be used.
-
-</br>
 
 ### Available Parameters:
 - For the entire list of parameters type `ros2 param list`.
@@ -208,16 +196,35 @@
 
 #### Parameters that can be modified during runtime:
 - All of the filters and sensors inner parameters.
+- Video Sensor Parameters: (```depth_module``` and ```rgb_camera```)
+  - They have, at least, the **profile** parameter.
+    - The profile parameter is a string of the following format: \<width>X\<height>X\<fps> (The dividing character can be X, x or ",". Spaces are ignored.)
+    - For example: ```depth_module.profile:=640x480x30 rgb_camera.profile:=1280x720x30```
+    - Since infra, infra1, infra2, fisheye, fisheye1, fisheye2 and depth are all streams of the depth_module, their width, height and fps are defined by the same param **depth_module.profile**
+    - If the specified combination of parameters is not available by the device, the default or previously set configuration will be used.
+      - Run ```ros2 param describe <your_node_name> <param_name>``` to get the list of supported profiles.
+    - Note: Should re-enable the stream for the change to take effect.
+  - ***<stream_name>*_format**
+    - This parameter is a string used to select the stream format.
+    - <stream_name> can be any of *infra, infra1, infra2, color, depth, fisheye, fisheye1, fisheye2*.
+    - For example: ```depth_module.depth_format:=Z16 depth_module.infra1_format:=y8 rgb_camera.color_format:=RGB8```
+    - This parameter supports both lower case and upper case letters.
+    - If the specified parameter is not available by the stream, the default or previously set configuration will be used.
+      - Run ```ros2 param describe <your_node_name> <param_name>``` to get the list of supported formats.
+    - Note: Should re-enable the stream for the change to take effect.
+  - If the stream doesn't support the user selected profile \<width>X\<height>X\<fps> + \<format>, it will not be opened and a warning message will be shown.
+    - Should update the profile settings and re-enable the stream for the change to take effect.
+    - Run ```rs-enumerate-devices``` command to know the list of profiles supported by the connected sensors.
 - **enable_*<stream_name>***: 
   - Choose whether to enable a specified stream or not. Default is true for images and false for orientation streams.
-  - <stream_name> can be any of *infra1, infra2, color, depth, fisheye, fisheye1, fisheye2, gyro, accel, pose*.
+  - <stream_name> can be any of *infra, infra1, infra2, color, depth, fisheye, fisheye1, fisheye2, gyro, accel, pose*.
   - For example: ```enable_infra1:=true enable_color:=false```
 - **enable_sync**:
   - gathers closest frames of different sensors, infra red, color and depth, to be sent with the same timetag.
   - This happens automatically when such filters as pointcloud are enabled.
 - ***<stream_type>*_qos**: 
   - Sets the QoS by which the topic is published.
-  - <stream_type> can be any of *infra, color, fisheye, depth, gyro, accel, pose*.
+  - <stream_type> can be any of *infra, infra1, infra2, color, depth, fisheye, fisheye1, fisheye2, gyro, accel, pose*.
   -  Available values are the following strings: `SYSTEM_DEFAULT`, `DEFAULT`, `PARAMETER_EVENTS`, `SERVICES_DEFAULT`, `PARAMETERS`, `SENSOR_DATA`.
   - For example: ```depth_qos:=SENSOR_DATA```
   - Reference: [ROS2 QoS profiles formal documentation](https://docs.ros.org/en/rolling/Concepts/About-Quality-of-Service-Settings.html#qos-profiles)
@@ -410,6 +417,28 @@ Enabling stream adds matching topics. For instance, enabling the gyro and accel 
 
 <hr>
 
+<h3 id="rgbd">
+  RGBD Topic
+</h3>
+
+RGBD new topic, publishing [RGB + Depth] in the same message (see RGBD.msg for reference). For now, works only with depth aligned to color images, as color and depth images are synchronized by frame time tag.
+
+These boolean paramters should be true to enable rgbd messages:
+
+- `enable_rgbd`: new paramter, to enable/disable rgbd topic, changeable during runtime
+- `align_depth.enable`: align depth images to rgb images
+- `enable_sync`: let librealsense sync between frames, and get the frameset with color and depth images combined
+- `enable_color` + `enable_depth`: enable both color and depth sensors
+
+The current QoS of the topic itself, is the same as Depth and Color streams (SYSTEM_DEFAULT)
+
+Example:
+```
+ros2 launch realsense2_camera rs_launch.py enable_rgbd:=true enable_sync:=true align_depth.enable:=true enable_color:=true enable_depth:=true 
+```
+
+<hr>
+
 <h3 id="metadata">
   Metadata topic
 </h3>
@@ -466,11 +495,11 @@ Each of the above filters have it's own parameters, following the naming convent
   Efficient intra-process communication:
 </h3>
   
-Our ROS2 Wrapper node supports zero-copy communications if loaded in the same process as a subscriber node. This can reduce copy times on image topics (not point-cloud or others), especially with big frame resolutions and high FPS.
+Our ROS2 Wrapper node supports zero-copy communications if loaded in the same process as a subscriber node. This can reduce copy times on image/pointcloud topics, especially with big frame resolutions and high FPS.
 
 You will need to launch a component container and launch our node as a component together with other component nodes. Further details on "Composing multiple nodes in a single process" can be found [here](https://docs.ros.org/en/rolling/Tutorials/Composition.html).
 
-Further details on efficient intra-process communication can be found [here](https://docs.ros.org/en/foxy/Tutorials/Intra-Process-Communication.html#efficient-intra-process-communication).
+Further details on efficient intra-process communication can be found [here](https://docs.ros.org/en/humble/Tutorials/Intra-Process-Communication.html#efficient-intra-process-communication).
 
   ### Example
 #### Manually loading multiple components into the same process
@@ -513,10 +542,8 @@ ros2 launch realsense2_camera rs_intra_process_demo_launch.py intra_process_comm
 [rolling]: https://docs.ros.org/en/rolling/index.html
 [humble-badge]: https://img.shields.io/badge/-HUMBLE-orange?style=flat-square&logo=ros
 [humble]: https://docs.ros.org/en/humble/index.html
-[foxy-badge]: https://img.shields.io/badge/-FOXY-orange?style=flat-square&logo=ros
-[foxy]: https://docs.ros.org/en/foxy/index.html
-[galactic-badge]: https://img.shields.io/badge/-GALACTIC-orange?style=flat-square&logo=ros
-[galactic]: https://docs.ros.org/en/galactic/index.html
+[iron-badge]: https://img.shields.io/badge/-IRON-orange?style=flat-square&logo=ros
+[iron]: https://docs.ros.org/en/iron/index.html
 [ubuntu22-badge]: https://img.shields.io/badge/-UBUNTU%2022%2E04-blue?style=flat-square&logo=ubuntu&logoColor=white
 [ubuntu22]: https://releases.ubuntu.com/jammy/
 [ubuntu20-badge]: https://img.shields.io/badge/-UBUNTU%2020%2E04-blue?style=flat-square&logo=ubuntu&logoColor=white

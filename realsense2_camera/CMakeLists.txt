@@ -116,7 +116,7 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(diagnostic_updater REQUIRED)
 
-find_package(realsense2 2.51.1)
+find_package(realsense2 2.54.1)
 if(NOT realsense2_FOUND)
     message(FATAL_ERROR "\n\n Intel RealSense SDK 2.0 is missing, please install it from https://github.com/IntelRealSense/librealsense/releases\n\n")
 endif()
@@ -163,6 +163,10 @@ elseif("$ENV{ROS_DISTRO}" STREQUAL "galactic")
 elseif("$ENV{ROS_DISTRO}" STREQUAL "humble")
   message(STATUS "Build for ROS2 Humble")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHUMBLE")
+  set(SOURCES "${SOURCES}" src/ros_param_backend_foxy.cpp)
+elseif("$ENV{ROS_DISTRO}" STREQUAL "iron")
+  message(STATUS "Build for ROS2 Iron")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DIRON")
   set(SOURCES "${SOURCES}" src/ros_param_backend_foxy.cpp)
 elseif("$ENV{ROS_DISTRO}" STREQUAL "rolling")
   message(STATUS "Build for ROS2 Rolling")
@@ -270,7 +274,46 @@ install(DIRECTORY
 
 # Test
 if(BUILD_TESTING)
-# This does nothing for now, note that ROS build farm build with BUILD_TESTING=1
+  find_package(ament_cmake_gtest REQUIRED)
+  set(_gtest_folders
+    test
+  )
+  foreach(test_folder ${_gtest_folders})
+    file(GLOB files "${test_folder}/gtest_*.cpp")
+    foreach(file ${files})
+       get_filename_component(_test_name ${file} NAME_WE)
+       ament_add_gtest(${_test_name} ${file})
+       target_include_directories(${_test_name} PUBLIC
+          $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+          $<INSTALL_INTERFACE:include>
+       )
+       ament_target_dependencies(${_test_name}
+          std_msgs
+       )
+       #target_link_libraries(${_test_name} name_of_local_library)
+    endforeach()
+  endforeach()
+
+
+  find_package(ament_cmake_pytest REQUIRED)
+  set(_pytest_folders
+    test
+    test/templates
+    test/rosbag
+    test/post_processing_filters
+  )
+  foreach(test_folder ${_pytest_folders})
+    file(GLOB files "${test_folder}/test_*.py")
+    foreach(file ${files})
+
+    get_filename_component(_test_name ${file} NAME_WE)
+    ament_add_pytest_test(${_test_name} ${file}
+      APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_SOURCE_DIR}/test/utils:${CMAKE_SOURCE_DIR}/launch:${CMAKE_SOURCE_DIR}/scripts
+      TIMEOUT 60
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    endforeach()
+  endforeach()
 endif()
 
 # Ament exports

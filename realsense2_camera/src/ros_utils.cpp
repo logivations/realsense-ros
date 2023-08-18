@@ -80,6 +80,22 @@ std::string create_graph_resource_name(const std::string &original_name)
     return fixed_name;
 }
 
+rs2_format string_to_rs2_format(std::string str)
+{
+    rs2_format format = RS2_FORMAT_ANY;
+
+    for (int i = 0; i < RS2_FORMAT_COUNT; i++)
+    {
+        transform(str.begin(), str.end(), str.begin(), ::toupper);
+        if (str.compare(rs2_format_to_string((rs2_format)i)) == 0)
+        {
+            format = (rs2_format)i;
+            break;
+        }
+    }
+    return format;
+}
+
 static const rmw_qos_profile_t rmw_qos_profile_latched =
 {
     RMW_QOS_POLICY_HISTORY_KEEP_LAST,
@@ -127,48 +143,6 @@ const std::string list_available_qos_strings()
         << "PARAMETERS" << "\n"
         << "SENSOR_DATA";
     return res.str();
-}
-
-rs2_stream rs2_string_to_stream(std::string str)
-{
-    if (str == "RS2_STREAM_ANY")
-        return RS2_STREAM_ANY;
-    if (str == "RS2_STREAM_COLOR")
-        return RS2_STREAM_COLOR;
-    if (str == "RS2_STREAM_INFRARED")
-        return RS2_STREAM_INFRARED;
-    if (str == "RS2_STREAM_FISHEYE")
-        return RS2_STREAM_FISHEYE;
-    throw std::runtime_error("Unknown stream string " + str);
-}
-
-stream_index_pair rs2_string_to_sip(const std::string& str)
-{
-    if (str == "color")
-        return realsense2_camera::COLOR;
-    if (str == "depth")
-        return DEPTH;
-    if (str == "infra")
-        return INFRA0;
-    if (str == "infra1")
-        return INFRA1;
-    if (str == "infra2")
-        return INFRA2;
-    if (str == "fisheye")
-        return FISHEYE;
-    if (str == "fisheye1")
-        return FISHEYE1;
-    if (str == "fisheye2")
-        return FISHEYE2;
-    if (str == "gyro")
-        return GYRO;
-    if (str == "accel")
-        return ACCEL;
-    if (str == "pose")
-        return POSE;
-    std::stringstream ss;
-    ss << "Unknown parameter " << str << " in" << __FILE__ << ":" << __LINE__;
-    throw std::runtime_error(ss.str());
 }
 
 }

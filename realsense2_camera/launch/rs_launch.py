@@ -22,6 +22,7 @@ from launch.substitutions import LaunchConfiguration
 
 
 configurable_parameters = [{'name': 'camera_name',                  'default': 'camera', 'description': 'camera unique name'},
+                           {'name': 'camera_namespace',             'default': 'camera', 'description': 'namespace for camera'},
                            {'name': 'serial_no',                    'default': "''", 'description': 'choose device by serial number'},
                            {'name': 'usb_port_id',                  'default': "''", 'description': 'choose device by usb port id'},
                            {'name': 'device_type',                  'default': "''", 'description': 'choose device by type'},
@@ -30,34 +31,40 @@ configurable_parameters = [{'name': 'camera_name',                  'default': '
                            {'name': 'json_file_path',               'default': "''", 'description': 'allows advanced configuration'},
                            {'name': 'log_level',                    'default': 'info', 'description': 'debug log level [DEBUG|INFO|WARN|ERROR|FATAL]'},
                            {'name': 'output',                       'default': 'screen', 'description': 'pipe node output [screen|log]'},
-                           {'name': 'depth_module.profile',         'default': '0,0,0', 'description': 'depth module profile'},                           
+                           {'name': 'depth_module.profile',         'default': '0,0,0', 'description': 'depth module profile'},
+                           {'name': 'depth_module.depth_format',    'default': 'Z16', 'description': 'depth stream format'},
+                           {'name': 'depth_module.infra_format',    'default': 'RGB8', 'description': 'infra0 stream format'},
+                           {'name': 'depth_module.infra1_format',   'default': 'Y8', 'description': 'infra1 stream format'},
+                           {'name': 'depth_module.infra2_format',   'default': 'Y8', 'description': 'infra2 stream format'},
                            {'name': 'enable_depth',                 'default': 'true', 'description': 'enable depth stream'},
                            {'name': 'rgb_camera.profile',           'default': '0,0,0', 'description': 'color image width'},
+                           {'name': 'rgb_camera.color_format',      'default': 'RGB8', 'description': 'color stream format'},
                            {'name': 'rgb_camera.enable_auto_exposure', 'default': 'true', 'description': 'enable/disable auto exposure for color image'},
                            {'name': 'enable_color',                 'default': 'true', 'description': 'enable color stream'},
+                           {'name': 'enable_infra',                 'default': 'false', 'description': 'enable infra0 stream'},
                            {'name': 'enable_infra1',                'default': 'false', 'description': 'enable infra1 stream'},
                            {'name': 'enable_infra2',                'default': 'false', 'description': 'enable infra2 stream'},
-                           {'name': 'infra_rgb',                    'default': 'false', 'description': 'enable infra2 stream'},
                            {'name': 'enable_fisheye1',              'default': 'true', 'description': 'enable fisheye1 stream'},
                            {'name': 'enable_fisheye2',              'default': 'true', 'description': 'enable fisheye2 stream'},
-                           {'name': 'enable_confidence',            'default': 'true', 'description': 'enable depth stream'},
-                           {'name': 'gyro_fps',                     'default': '0', 'description': "''"},                           
-                           {'name': 'accel_fps',                    'default': '0', 'description': "''"},                           
-                           {'name': 'enable_gyro',                  'default': 'false', 'description': "''"},                           
-                           {'name': 'enable_accel',                 'default': 'false', 'description': "''"},                           
-                           {'name': 'enable_pose',                  'default': 'true', 'description': "''"},                           
-                           {'name': 'pose_fps',                     'default': '200', 'description': "''"},                           
-                           {'name': 'pointcloud.enable',            'default': 'false', 'description': ''}, 
+                           {'name': 'enable_confidence',            'default': 'true', 'description': 'enable confidence'},
+                           {'name': 'gyro_fps',                     'default': '0', 'description': "''"},
+                           {'name': 'accel_fps',                    'default': '0', 'description': "''"},
+                           {'name': 'enable_gyro',                  'default': 'false', 'description': "'enable gyro stream'"},
+                           {'name': 'enable_accel',                 'default': 'false', 'description': "'enable accel stream'"},
+                           {'name': 'enable_pose',                  'default': 'true', 'description': "'enable pose stream'"},
+                           {'name': 'pose_fps',                     'default': '200', 'description': "''"},
+                           {'name': 'pointcloud.enable',            'default': 'false', 'description': ''},
                            {'name': 'pointcloud.stream_filter',     'default': '2', 'description': 'texture stream for pointcloud'},
                            {'name': 'pointcloud.stream_index_filter','default': '0', 'description': 'texture stream index for pointcloud'},
-                           {'name': 'enable_sync',                  'default': 'false', 'description': "''"},                           
-                           {'name': 'align_depth.enable',           'default': 'false', 'description': "''"},                           
-                           {'name': 'colorizer.enable',             'default': 'false', 'description': "''"},
-                           {'name': 'clip_distance',                'default': '-2.', 'description': "''"},                           
-                           {'name': 'linear_accel_cov',             'default': '0.01', 'description': "''"},                           
-                           {'name': 'initial_reset',                'default': 'false', 'description': "''"},                           
-                           {'name': 'allow_no_texture_points',      'default': 'false', 'description': "''"},                           
                            {'name': 'pointcloud.ordered_pc',        'default': 'false', 'description': ''},
+                           {'name': 'enable_sync',                  'default': 'false', 'description': "'enable sync mode'"},
+                           {'name': 'enable_rgbd',                  'default': 'false', 'description': "'enable rgbd topic'"},
+                           {'name': 'align_depth.enable',           'default': 'false', 'description': "'enable align depth filter'"},
+                           {'name': 'colorizer.enable',             'default': 'false', 'description': "''"},
+                           {'name': 'clip_distance',                'default': '-2.', 'description': "''"},
+                           {'name': 'linear_accel_cov',             'default': '0.01', 'description': "''"},
+                           {'name': 'initial_reset',                'default': 'false', 'description': "''"},
+                           {'name': 'allow_no_texture_points',      'default': 'false', 'description': "''"},
                            {'name': 'publish_tf',                   'default': 'true', 'description': '[bool] enable/disable publishing static & dynamic TF'},
                            {'name': 'tf_publish_rate',              'default': '0.0', 'description': '[double] rate in Hz for publishing dynamic TF'},
                            {'name': 'diagnostics_period',           'default': '0.0', 'description': 'Rate of publishing diagnostics. 0=Disabled'},
@@ -86,44 +93,43 @@ def yaml_to_dict(path_to_yaml):
     with open(path_to_yaml, "r") as f:
         return yaml.load(f, Loader=yaml.SafeLoader)
 
-def launch_setup(context, *args, **kwargs):
-    _config_file = LaunchConfiguration("config_file").perform(context)
+def launch_setup(context, params, param_name_suffix=''):
+    _config_file = LaunchConfiguration('config_file' + param_name_suffix).perform(context)
     params_from_file = {} if _config_file == "''" else yaml_to_dict(_config_file)
-    log_level = 'info'
     # Realsense
     if (os.getenv('ROS_DISTRO') == "dashing") or (os.getenv('ROS_DISTRO') == "eloquent"):
         return [
             launch_ros.actions.Node(
                 package='realsense2_camera',
-                node_namespace=LaunchConfiguration("camera_name"),
-                node_name=LaunchConfiguration("camera_name"),
+                node_namespace=LaunchConfiguration('camera_namespace' + param_name_suffix),
+                node_name=LaunchConfiguration('camera_name' + param_name_suffix),
                 node_executable='realsense2_camera_node',
                 prefix=['stdbuf -o L'],
-                parameters=[set_configurable_parameters(configurable_parameters)
+                parameters=[params
                             , params_from_file
                             ],
                 output='screen',
-                arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
+                arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level' + param_name_suffix)],
                 )
             ]
     else:
         return [
             launch_ros.actions.Node(
                 package='realsense2_camera',
-                namespace=LaunchConfiguration("camera_name"),
-                name=LaunchConfiguration("camera_name"),
+                namespace=LaunchConfiguration('camera_namespace' + param_name_suffix),
+                name=LaunchConfiguration('camera_name' + param_name_suffix),
                 executable='realsense2_camera_node',
-                parameters=[set_configurable_parameters(configurable_parameters)
+                parameters=[params
                             , params_from_file
                             ],
                 output='screen',
                 respawn=True,
-                arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level')],
+                arguments=['--ros-args', '--log-level', LaunchConfiguration('log_level' + param_name_suffix)],
                 emulate_tty=True,
                 )
         ]
 
 def generate_launch_description():
     return LaunchDescription(declare_configurable_parameters(configurable_parameters) + [
-        OpaqueFunction(function=launch_setup)
+        OpaqueFunction(function=launch_setup, kwargs = {'params' : set_configurable_parameters(configurable_parameters)})
     ])
