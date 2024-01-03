@@ -255,6 +255,7 @@ void BaseRealSenseNode::publishDynamicTransforms()
             {
                 for(auto& msg : _static_tf_msgs)
                     msg.header.stamp = t;
+                restartStaticTransformBroadcaster();
                 _static_tf_broadcaster->sendTransform(_static_tf_msgs);
             }
             catch(const std::exception& e)
