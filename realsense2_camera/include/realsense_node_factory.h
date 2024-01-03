@@ -37,10 +37,10 @@ namespace realsense2_camera
     class RealSenseNodeFactory : public rclcpp::Node
     {
     public:
-        explicit RealSenseNodeFactory(const rclcpp::NodeOptions & node_options = rclcpp::NodeOptions());
+        explicit RealSenseNodeFactory(const rclcpp::NodeOptions & node_options = rclcpp::NodeOptions().start_parameter_event_publisher(false));
         RealSenseNodeFactory(
             const std::string & node_name, const std::string & ns,
-            const rclcpp::NodeOptions & node_options = rclcpp::NodeOptions());
+            const rclcpp::NodeOptions & node_options = rclcpp::NodeOptions().start_parameter_event_publisher(false));
         virtual ~RealSenseNodeFactory();
 
     private:
