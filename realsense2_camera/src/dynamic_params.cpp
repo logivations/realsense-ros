@@ -115,7 +115,11 @@ namespace realsense2_camera
         try
         {
             ROS_DEBUG_STREAM("setParam::Setting parameter: " << param_name);
-            descriptor.dynamic_typing=true; // Without this, undeclare_parameter() throws error.
+#if defined(FOXY)
+            //do nothing for old versions (foxy)
+#else
+            descriptor.dynamic_typing=true;
+#endif
             if (!_node.get_parameter(param_name, result_value))
             {
                 result_value = _node.declare_parameter(param_name, initial_value, descriptor);
@@ -267,6 +271,12 @@ namespace realsense2_camera
         _param_functions.erase(param_name);
     }
 
+    template <class T>
+    T Parameters::getParam(std::string param_name)
+    {
+        return _node.get_parameter(param_name).get_value<T>();
+    }
+
     template void Parameters::setParamT<bool>(std::string param_name, bool& param, std::function<void(const rclcpp::Parameter&)> func, rcl_interfaces::msg::ParameterDescriptor descriptor);
     template void Parameters::setParamT<int>(std::string param_name, int& param, std::function<void(const rclcpp::Parameter&)> func, rcl_interfaces::msg::ParameterDescriptor descriptor);
     template void Parameters::setParamT<double>(std::string param_name, double& param, std::function<void(const rclcpp::Parameter&)> func, rcl_interfaces::msg::ParameterDescriptor descriptor);
@@ -284,4 +294,6 @@ namespace realsense2_camera
     template void Parameters::queueSetRosValue<int>(const std::string& param_name, const int value);
 
     template int Parameters::readAndDeleteParam<int>(std::string param_name, const int& initial_value);
+
+    template bool Parameters::getParam<bool>(std::string param_name);
 }
