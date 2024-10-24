@@ -311,6 +311,11 @@ namespace realsense2_camera
         double _angular_velocity_cov;
         bool  _hold_back_imu_for_frames;
 
+        double _publish_fps;
+        double _color_fps;
+        unsigned int _frame_counter = 1;
+        unsigned int _frames_to_skip = 0;
+
         std::map<stream_index_pair, bool> _enable;
         bool _publish_tf;
         double _tf_publish_rate, _diagnostics_period;

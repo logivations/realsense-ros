@@ -83,6 +83,16 @@ void BaseRealSenseNode::getParameters()
     _base_frame_id = (static_cast<std::ostringstream&&>(std::ostringstream() << _camera_name << "_" << _base_frame_id)).str();
     _parameters_names.push_back(param_name);
 
+    param_name = std::string("publish_fps");
+    _publish_fps = _parameters->setParam<double>(param_name, 6.0);
+    _parameters_names.push_back(param_name);
+
+    param_name = std::string("color_fps");
+    _color_fps = _parameters->setParam<double>(param_name, 30.0);
+    _parameters_names.push_back(param_name);
+
+    _frames_to_skip = _color_fps / _publish_fps;
+
 #if defined (ACCELERATE_GPU_WITH_GLSL)
     param_name = std::string("accelerate_gpu_with_glsl");
      _parameters->setParam<bool>(param_name, false,

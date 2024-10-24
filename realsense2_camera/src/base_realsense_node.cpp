@@ -559,6 +559,14 @@ void BaseRealSenseNode::imu_callback(rs2::frame frame)
 
 void BaseRealSenseNode::frame_callback(rs2::frame frame)
 {
+    //we know that we have less depth frames than color frames, so we can skip some frames after a depth frame
+    if (_frame_counter < _frames_to_skip - 2)
+    {
+        ROS_INFO("skip for sure");
+        _frame_counter++;
+        return;
+    }
+
     if (_synced_imu_publisher)
         _synced_imu_publisher->Pause();
     double frame_time = frame.get_timestamp();
@@ -591,6 +599,10 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
         }
         // Clip depth_frame for max range:
         rs2::depth_frame original_depth_frame = frameset.get_depth_frame();
+        if(!original_depth_frame){
+            // skip frames which don't have depth frames
+            return;
+        }
         if (original_depth_frame && _clipping_distance > 0)
         {
             clip_depth(original_depth_frame, _clipping_distance);
@@ -676,6 +688,9 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
      }
      if (_synced_imu_publisher)
         _synced_imu_publisher->Resume();
+
+    // found frame, reset counter
+    _frame_counter = 1;
 } // frame_callback
 
 void BaseRealSenseNode::multiple_message_callback(rs2::frame frame, imu_sync_method sync_method)
