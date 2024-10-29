@@ -562,7 +562,6 @@ void BaseRealSenseNode::frame_callback(rs2::frame frame)
     //we know that we have less depth frames than color frames, so we can skip some frames after a depth frame
     if (_frame_counter < _frames_to_skip - 2)
     {
-        ROS_INFO("skip for sure");
         _frame_counter++;
         return;
     }
