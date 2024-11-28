@@ -58,7 +58,6 @@ RosSensor::RosSensor(rs2::sensor sensor,
     _min_fps_threshold(parameters.getParameters()->readAndDeleteParam("min_fps_threshold", 10.0))
 {
     ROS_ERROR_STREAM("RosSensor started");
-    ROS_ERROR_STREAM("min_fps_threshold is " >> _min_fps_threshold);
 
     _frame_callback = [this](rs2::frame frame)
         {
