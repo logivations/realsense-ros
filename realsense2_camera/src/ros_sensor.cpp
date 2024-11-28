@@ -54,8 +54,12 @@ RosSensor::RosSensor(rs2::sensor sensor,
     _update_sensor_func(update_sensor_func),
     _hardware_reset_func(hardware_reset_func),
     _diagnostics_updater(diagnostics_updater),
-    _force_image_default_qos(force_image_default_qos)
+    _force_image_default_qos(force_image_default_qos),
+    _min_fps_threshold(parameters.getParameters()->readAndDeleteParam("min_fps_threshold", 10.0))
 {
+    ROS_ERROR_STREAM("RosSensor started");
+    ROS_ERROR_STREAM("min_fps_threshold is " >> _min_fps_threshold);
+
     _frame_callback = [this](rs2::frame frame)
         {
             runFirstFrameInitialization();
@@ -286,7 +290,7 @@ bool RosSensor::start(const std::vector<stream_profile>& profiles)
     {
         stream_index_pair sip(profile.stream_type(), profile.stream_index());
         if (_diagnostics_updater)
-            _frequency_diagnostics.emplace(sip, FrequencyDiagnostics(STREAM_NAME(sip), profile.fps(), _diagnostics_updater));
+             _frequency_diagnostics.emplace(sip, FrequencyDiagnostics(STREAM_NAME(sip), profile.fps(), _min_fps_threshold, _diagnostics_updater));
     }
     return true;
 }
