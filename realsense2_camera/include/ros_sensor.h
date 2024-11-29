@@ -32,9 +32,9 @@ namespace realsense2_camera
     class FrequencyDiagnostics
     {
     public:
-    FrequencyDiagnostics(std::string name, int expected_frequency, int _min_fps_threshold, std::shared_ptr<diagnostic_updater::Updater> updater):
+    FrequencyDiagnostics(std::string name, int expected_frequency, int min_fps_threshold, std::shared_ptr<diagnostic_updater::Updater> updater):
             _name(name),
-            _min_freq(_min_fps_threshold), _max_freq(expected_frequency),
+            _min_freq(min_fps_threshold), _max_freq(expected_frequency),
             _freq_status_param(&_min_freq, &_max_freq, 0.1, 10),
             _freq_status(_freq_status_param, _name),
             _p_updater(updater)

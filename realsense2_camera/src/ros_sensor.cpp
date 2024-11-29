@@ -289,7 +289,7 @@ bool RosSensor::start(const std::vector<stream_profile>& profiles)
     {
         stream_index_pair sip(profile.stream_type(), profile.stream_index());
         if (_diagnostics_updater)
-             _frequency_diagnostics.emplace(sip, FrequencyDiagnostics(STREAM_NAME(sip), profile.fps(), _min_fps_threshold, _diagnostics_updater));
+            _frequency_diagnostics.emplace(sip, FrequencyDiagnostics(STREAM_NAME(sip), profile.fps(), _min_fps_threshold, _diagnostics_updater));
     }
     return true;
 }
