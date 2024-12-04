@@ -152,6 +152,8 @@ void BaseRealSenseNode::setAvailableSensors()
 
     _dev_sensors = _dev.query_sensors();
 
+    ROS_INFO_STREAM("BaseRealSenseNode::setAvailableSensors()" << _parameters->getParam<double>("min_fps_threshold"));
+
     for(auto&& sensor : _dev_sensors)
     {
         const std::string module_name(rs2_to_ros(sensor.get_info(RS2_CAMERA_INFO_NAME)));
