@@ -152,8 +152,6 @@ void BaseRealSenseNode::setAvailableSensors()
 
     _dev_sensors = _dev.query_sensors();
 
-    ROS_INFO_STREAM("BaseRealSenseNode::setAvailableSensors()" << _parameters->getParam<double>("min_fps_threshold"));
-
     for(auto&& sensor : _dev_sensors)
     {
         const std::string module_name(rs2_to_ros(sensor.get_info(RS2_CAMERA_INFO_NAME)));
@@ -162,12 +160,12 @@ void BaseRealSenseNode::setAvailableSensors()
             sensor.is<rs2::color_sensor>())
         {
             ROS_DEBUG_STREAM("Set " << module_name << " as VideoSensor.");
-            rosSensor = std::make_unique<RosSensor>(sensor, _parameters, frame_callback_function, update_sensor_func, hardware_reset_func, _diagnostics_updater, _logger, _use_intra_process, _dev.is<playback>());
+            rosSensor = std::make_unique<RosSensor>(sensor, _parameters, frame_callback_function, update_sensor_func, hardware_reset_func, _diagnostics_updater, _min_fps_threshold, _logger, _use_intra_process, _dev.is<playback>());
         }
         else if (sensor.is<rs2::motion_sensor>())
         {
             ROS_DEBUG_STREAM("Set " << module_name << " as ImuSensor.");
-            rosSensor = std::make_unique<RosSensor>(sensor, _parameters, imu_callback_function, update_sensor_func, hardware_reset_func, _diagnostics_updater, _logger, false, _dev.is<playback>());
+            rosSensor = std::make_unique<RosSensor>(sensor, _parameters, imu_callback_function, update_sensor_func, hardware_reset_func, _diagnostics_updater, _min_fps_threshold, _logger, false, _dev.is<playback>());
         }
         else
         {

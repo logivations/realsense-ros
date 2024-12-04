@@ -44,6 +44,7 @@ RosSensor::RosSensor(rs2::sensor sensor,
     std::function<void()> update_sensor_func,
     std::function<void()> hardware_reset_func, 
     std::shared_ptr<diagnostic_updater::Updater> diagnostics_updater,
+    double min_fps_threshold,
     rclcpp::Logger logger,
     bool force_image_default_qos,
     bool is_rosbag_file):
@@ -54,8 +55,8 @@ RosSensor::RosSensor(rs2::sensor sensor,
     _update_sensor_func(update_sensor_func),
     _hardware_reset_func(hardware_reset_func),
     _diagnostics_updater(diagnostics_updater),
-    _force_image_default_qos(force_image_default_qos),
-    _min_fps_threshold(15.0)
+    _min_fps_threshold(min_fps_threshold),
+    _force_image_default_qos(force_image_default_qos)  
 {
     ROS_ERROR_STREAM("RosSensor started");
 
