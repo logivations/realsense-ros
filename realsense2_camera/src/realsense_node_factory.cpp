@@ -246,7 +246,6 @@ void RealSenseNodeFactory::init()
 {
     try
     {
-        ROS_INFO("init RealSenseNodeFactory");
         _is_alive = true;
         _parameters = std::make_shared<Parameters>(*this);
 

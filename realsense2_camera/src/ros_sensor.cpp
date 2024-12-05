@@ -58,10 +58,6 @@ RosSensor::RosSensor(rs2::sensor sensor,
     _min_fps_threshold(min_fps_threshold),
     _force_image_default_qos(force_image_default_qos)  
 {
-    ROS_ERROR_STREAM("RosSensor started");
-
-    ROS_INFO_STREAM("RosSensor::RosSensor" << _min_fps_threshold);
-
     _frame_callback = [this](rs2::frame frame)
         {
             runFirstFrameInitialization();

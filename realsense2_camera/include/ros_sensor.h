@@ -40,8 +40,6 @@ namespace realsense2_camera
             _p_updater(updater)
             {
                 _p_updater->add(_freq_status);
-                std::cout << "FrequencyDiagnostics initialized with _min_freq: " << _min_freq << std::endl;
-
             };
 
     FrequencyDiagnostics (const FrequencyDiagnostics& other):
