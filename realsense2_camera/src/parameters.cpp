@@ -95,6 +95,10 @@ void BaseRealSenseNode::getParameters()
     _min_fps_threshold = _parameters->setParam<double>(param_name, 10.0);
     _parameters_names.push_back(param_name);
 
+    param_name = std::string("max_fps_threshold");
+    _max_fps_threshold = _parameters->setParam<double>(param_name, 10.0);
+    _parameters_names.push_back(param_name);
+
     _frames_to_skip = _color_fps / _publish_fps;
 
 #if defined (ACCELERATE_GPU_WITH_GLSL)

@@ -87,6 +87,7 @@ configurable_parameters = [{'name': 'camera_name',                  'default': '
                            {'name': 'wait_for_device_timeout',      'default': '-1.', 'description': 'Timeout for waiting for device to connect (Seconds)'},
                            {'name': 'reconnect_timeout',            'default': '6.', 'description': 'Timeout(seconds) between consequtive reconnection attempts'},
                            {'name': 'min_fps_threshold',            'default': '10.', 'description': 'Min frame publishing frequency threshold'},
+                           {'name': 'max_fps_threshold',            'default': '10.', 'description': 'Max frame publishing frequency threshold'},
                           ]
 
 def declare_configurable_parameters(parameters):
