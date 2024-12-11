@@ -32,10 +32,10 @@ namespace realsense2_camera
     class FrequencyDiagnostics
     {
     public:
-    FrequencyDiagnostics(std::string name, int expected_frequency, double min_fps_threshold, double max_fps_threshold, std::shared_ptr<diagnostic_updater::Updater> updater):
+    FrequencyDiagnostics(std::string name, int expected_frequency, double color_freq_tolerance, std::shared_ptr<diagnostic_updater::Updater> updater):
             _name(name),
-            _min_freq(min_fps_threshold), _max_freq(max_fps_threshold),
-            _freq_status_param(&_min_freq, &_max_freq, 0.0, 10),
+            _min_freq(expected_frequency), _max_freq(expected_frequency),_color_freq_tolerance(color_freq_tolerance),
+            _freq_status_param(&_min_freq, &_max_freq, _color_freq_tolerance, 10),
             _freq_status(_freq_status_param, _name),
             _p_updater(updater)
             {
@@ -46,7 +46,7 @@ namespace realsense2_camera
             _name(other._name),
             _min_freq(other._min_freq),
             _max_freq(other._max_freq),
-            _freq_status_param(&_min_freq, &_max_freq, 0.0, 10),
+            _freq_status_param(&_min_freq, &_max_freq, &_color_freq_tolerance, 10),
             _freq_status(_freq_status_param, _name),
             _p_updater(other._p_updater)
             {
@@ -64,7 +64,7 @@ namespace realsense2_camera
     
     private:
         std::string _name;
-        double _min_freq, _max_freq;
+        double _min_freq, _max_freq, _color_freq_tolerance;
         diagnostic_updater::FrequencyStatusParam _freq_status_param;
         diagnostic_updater::FrequencyStatus _freq_status;
         std::shared_ptr<diagnostic_updater::Updater> _p_updater;
@@ -80,8 +80,7 @@ namespace realsense2_camera
                       std::function<void()> update_sensor_func,
                       std::function<void()> hardware_reset_func, 
                       std::shared_ptr<diagnostic_updater::Updater> diagnostics_updater,
-                      double min_fps_threshold,
-                      double max_fps_threshold,
+                      double color_freq_tolerance,
                       rclcpp::Logger logger,
                       bool force_image_default_qos = false,
                       bool is_rosbag_file = false);
@@ -122,8 +121,7 @@ namespace realsense2_camera
             rs2::region_of_interest _auto_exposure_roi;
             std::vector<std::string> _parameters_names;
             std::shared_ptr<diagnostic_updater::Updater> _diagnostics_updater;
-            double _min_fps_threshold;
-            double _max_fps_threshold;
+            double _color_freq_tolerance;
             std::map<stream_index_pair, FrequencyDiagnostics> _frequency_diagnostics;
             bool _force_image_default_qos;
     };
