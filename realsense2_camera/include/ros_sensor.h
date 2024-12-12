@@ -46,6 +46,7 @@ namespace realsense2_camera
             _name(other._name),
             _min_freq(other._min_freq),
             _max_freq(other._max_freq),
+            _color_freq_tolerance(other._color_freq_tolerance),
             _freq_status_param(&_min_freq, &_max_freq, _color_freq_tolerance, 10),
             _freq_status(_freq_status_param, _name),
             _p_updater(other._p_updater)
