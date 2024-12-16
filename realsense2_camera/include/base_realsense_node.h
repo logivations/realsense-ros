@@ -313,6 +313,7 @@ namespace realsense2_camera
 
         double _publish_fps;
         double _color_fps;
+        double _color_freq_tolerance;
         unsigned int _frame_counter = 1;
         unsigned int _frames_to_skip = 0;
 

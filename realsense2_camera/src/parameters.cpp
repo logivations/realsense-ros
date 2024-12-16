@@ -91,6 +91,10 @@ void BaseRealSenseNode::getParameters()
     _color_fps = _parameters->setParam<double>(param_name, 30.0);
     _parameters_names.push_back(param_name);
 
+    param_name = std::string("color_freq_tolerance");
+    _color_freq_tolerance = _parameters->setParam<double>(param_name, 0.1);
+    _parameters_names.push_back(param_name);
+
     _frames_to_skip = _color_fps / _publish_fps;
 
 #if defined (ACCELERATE_GPU_WITH_GLSL)

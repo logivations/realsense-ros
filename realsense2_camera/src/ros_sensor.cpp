@@ -44,6 +44,7 @@ RosSensor::RosSensor(rs2::sensor sensor,
     std::function<void()> update_sensor_func,
     std::function<void()> hardware_reset_func, 
     std::shared_ptr<diagnostic_updater::Updater> diagnostics_updater,
+    double color_freq_tolerance,
     rclcpp::Logger logger,
     bool force_image_default_qos,
     bool is_rosbag_file):
@@ -54,7 +55,8 @@ RosSensor::RosSensor(rs2::sensor sensor,
     _update_sensor_func(update_sensor_func),
     _hardware_reset_func(hardware_reset_func),
     _diagnostics_updater(diagnostics_updater),
-    _force_image_default_qos(force_image_default_qos)
+    _color_freq_tolerance(color_freq_tolerance),
+    _force_image_default_qos(force_image_default_qos)  
 {
     _frame_callback = [this](rs2::frame frame)
         {
@@ -286,7 +288,7 @@ bool RosSensor::start(const std::vector<stream_profile>& profiles)
     {
         stream_index_pair sip(profile.stream_type(), profile.stream_index());
         if (_diagnostics_updater)
-            _frequency_diagnostics.emplace(sip, FrequencyDiagnostics(STREAM_NAME(sip), profile.fps(), _diagnostics_updater));
+            _frequency_diagnostics.emplace(sip, FrequencyDiagnostics(STREAM_NAME(sip), profile.fps(), _color_freq_tolerance, _diagnostics_updater));
     }
     return true;
 }
