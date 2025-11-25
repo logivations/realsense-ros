@@ -45,7 +45,12 @@
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 
+#if defined(HUMBLE) || defined(IRON) || defined(JAZZY) 
 #include <tf2/LinearMath/Quaternion.h>
+#else
+#include <tf2/LinearMath/Quaternion.hpp>
+#endif
+
 #include <tf2_ros/transform_broadcaster.h>
 #include <tf2_ros/static_transform_broadcaster.h>
 #include <eigen3/Eigen/Geometry>
@@ -112,10 +117,12 @@ namespace realsense2_camera
             bool                                                _is_enabled;
     };
 
+    class AlignDepthFilter;
+    class PointcloudFilter;
     class BaseRealSenseNode
     {
     public:
-        BaseRealSenseNode(rclcpp::Node& node,
+        BaseRealSenseNode(RosNodeBase& node,
                           rs2::device dev,
                           std::shared_ptr<Parameters> parameters,
                           bool use_intra_process = false);
@@ -152,7 +159,7 @@ namespace realsense2_camera
 
         std::string _base_frame_id;
         bool _is_running;
-        rclcpp::Node& _node;
+        RosNodeBase& _node;
         std::string _camera_name;
         std::vector<rs2_option> _monitor_options;
         rclcpp::Logger _logger;
