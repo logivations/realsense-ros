@@ -105,6 +105,7 @@ BaseRealSenseNode::BaseRealSenseNode(RosNodeBase& node,
     _linear_accel_cov(0),
     _angular_velocity_cov(0),
     _hold_back_imu_for_frames(false),
+    _color_freq_tolerance(0.1),
     _publish_tf(false),
     _tf_publish_rate(TF_PUBLISH_RATE),
     _diagnostics_period(0),
@@ -120,8 +121,7 @@ BaseRealSenseNode::BaseRealSenseNode(RosNodeBase& node,
     _pointcloud(false),
     _imu_sync_method(imu_sync_method::NONE),
     _is_profile_changed(false),
-    _is_align_depth_changed(false),
-    _color_freq_tolerance(0.1)
+    _is_align_depth_changed(false)
 #if defined (ACCELERATE_GPU_WITH_GLSL)
     ,_app(1280, 720, "RS_GLFW_Window"),
     _accelerate_gpu_with_glsl(false),
