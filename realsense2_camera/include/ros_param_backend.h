@@ -1,4 +1,4 @@
-// Copyright 2023 Intel Corporation. All Rights Reserved.
+// Copyright 2023 RealSense, Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,14 +14,14 @@
 
 #pragma once
 
-#include <rclcpp/rclcpp.hpp>
+#include "ros_node_base.h"
 
 namespace realsense2_camera
 {
     class ParametersBackend
     {
         public:
-            ParametersBackend(rclcpp::Node& node) : 
+            ParametersBackend(RosNodeBase& node) : 
                 _node(node),
                 _logger(node.get_logger())
                 {}
@@ -38,7 +38,7 @@ namespace realsense2_camera
 
 
         private:
-            rclcpp::Node& _node;
+            RosNodeBase& _node;
             rclcpp::Logger _logger;
             std::shared_ptr<void> _ros_callback;
     };

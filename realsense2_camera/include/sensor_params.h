@@ -1,4 +1,4 @@
-// Copyright 2023 Intel Corporation. All Rights Reserved.
+// Copyright 2023 RealSense, Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 #pragma once
 #include <librealsense2/rs.hpp>
-#include <rclcpp/rclcpp.hpp>
+#include "ros_node_base.h"
 #include <dynamic_params.h>
 
 namespace realsense2_camera

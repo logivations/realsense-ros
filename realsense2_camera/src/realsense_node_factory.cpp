@@ -1,4 +1,4 @@
-// Copyright 2023 Intel Corporation. All Rights Reserved.
+// Copyright 2023 RealSense, Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "../include/realsense_node_factory.h"
-#include "../include/base_realsense_node.h"
+#include "realsense_node_factory.h"
+#include "base_realsense_node.h"
+#include "context_singleton_wrapper.h"
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -31,15 +32,66 @@ using namespace realsense2_camera;
 constexpr auto realsense_ros_camera_version = REALSENSE_ROS_EMBEDDED_VERSION_STR;
 
 RealSenseNodeFactory::RealSenseNodeFactory(const rclcpp::NodeOptions & node_options) :
-    Node("camera", "/camera", node_options),
+    RosNodeBase("camera", "/camera", node_options),
     _logger(this->get_logger())
 {
-  init();
+    #ifndef USE_LIFECYCLE_NODE
+    init();
+    #else
+    RCLCPP_INFO(get_logger(), "Transition: Unconfigured...");
+    #endif
 }
 
+#ifdef USE_LIFECYCLE_NODE
+RealSenseNodeFactory::CallbackReturn
+RealSenseNodeFactory::on_configure(const rclcpp_lifecycle::State & state)
+{
+    RCLCPP_INFO(get_logger(), "🚀 Lifecycle Transition | FROM: %s (%d) → TO: CONFIGURING",
+                state.label().c_str(), state.id());
+    init();
+    return CallbackReturn::SUCCESS;
+}
+
+RealSenseNodeFactory::CallbackReturn
+RealSenseNodeFactory::on_activate(const rclcpp_lifecycle::State & state)
+{
+    RCLCPP_INFO(get_logger(), "🚀 Lifecycle Transition | FROM: %s (%d) → TO: ACTIVATING",
+                state.label().c_str(), state.id());
+    startDevice();
+    return CallbackReturn::SUCCESS;
+}
+
+RealSenseNodeFactory::CallbackReturn
+RealSenseNodeFactory::on_deactivate(const rclcpp_lifecycle::State & state)
+{
+    RCLCPP_INFO(get_logger(), "🛑 Lifecycle Transition | FROM: %s (%d) → TO: DEACTIVATING",
+                state.label().c_str(), state.id());
+    stopDevice();
+    return CallbackReturn::SUCCESS;
+}
+
+RealSenseNodeFactory::CallbackReturn
+RealSenseNodeFactory::on_cleanup(const rclcpp_lifecycle::State & state)
+{
+    RCLCPP_INFO(get_logger(), "🧹 Lifecycle Transition | FROM: %s (%d) → TO: CLEANING UP",
+                state.label().c_str(), state.id());
+    closeDevice();
+    return CallbackReturn::SUCCESS;
+}
+
+RealSenseNodeFactory::CallbackReturn
+RealSenseNodeFactory::on_shutdown(const rclcpp_lifecycle::State & state)
+{
+    RCLCPP_INFO(get_logger(), "⚡ Lifecycle Transition | FROM: %s (%d) → TO: SHUTTING DOWN",
+                state.label().c_str(), state.id());
+    closeDevice();
+    return CallbackReturn::SUCCESS;
+}
+#endif
+
 RealSenseNodeFactory::RealSenseNodeFactory(const std::string & node_name, const std::string & ns,
-                                           const rclcpp::NodeOptions & node_options) : 
-    Node(node_name, ns, node_options),
+                                           const rclcpp::NodeOptions & node_options) :
+    RosNodeBase(node_name, ns, node_options),
     _logger(this->get_logger())
 {
   init();
@@ -115,7 +167,7 @@ void RealSenseNodeFactory::getDevice(rs2::device_list list)
                     {
                         std::stringstream msg;
                         msg << "Error extracting usb port from device with physical ID: " << pn << std::endl
-                            << "Please report on github issue at https://github.com/IntelRealSense/realsense-ros";
+                            << "Please report on github issue at https://github.com/realsenseai/realsense-ros";
                         if (_usb_port_id.empty())
                         {
                             ROS_WARN_STREAM(msg.str());
@@ -200,7 +252,7 @@ void RealSenseNodeFactory::getDevice(rs2::device_list list)
             ROS_INFO("Resetting device...");
             _device.hardware_reset();
             _device = rs2::device();
-            
+
         }
         catch(const std::exception& ex)
         {
@@ -274,32 +326,64 @@ void RealSenseNodeFactory::init()
         std::cout << "Press <ENTER> key to continue." << std::endl;
         std::cin.get();
 #endif
-        _serial_no = declare_parameter("serial_no", rclcpp::ParameterValue("")).get<rclcpp::PARAMETER_STRING>();
-        _usb_port_id = declare_parameter("usb_port_id", rclcpp::ParameterValue("")).get<rclcpp::PARAMETER_STRING>();
-        _device_type = declare_parameter("device_type", rclcpp::ParameterValue("")).get<rclcpp::PARAMETER_STRING>();
-        _wait_for_device_timeout = declare_parameter("wait_for_device_timeout", rclcpp::ParameterValue(-1.0)).get<rclcpp::PARAMETER_DOUBLE>();
-        _reconnect_timeout = declare_parameter("reconnect_timeout", 6.0);
+        // Using `getOrDeclareParameter()` to avoid re-declaration issues
+        _serial_no = _parameters->getOrDeclareParameter<std::string>("serial_no", "");
+        _usb_port_id = _parameters->getOrDeclareParameter<std::string>("usb_port_id", "");
+        _device_type = _parameters->getOrDeclareParameter<std::string>("device_type", "");
+        _wait_for_device_timeout = _parameters->getOrDeclareParameter<double>("wait_for_device_timeout", -1.0);
+        _reconnect_timeout = _parameters->getOrDeclareParameter<double>("reconnect_timeout", 6.0);
 
         // A ROS2 hack: until a better way is found to avoid auto convertion of strings containing only digits to integers:
         if (!_serial_no.empty() && _serial_no.front() == '_') _serial_no = _serial_no.substr(1);    // remove '_' prefix
 
-        std::string rosbag_filename(declare_parameter("rosbag_filename", rclcpp::ParameterValue("")).get<rclcpp::PARAMETER_STRING>());
+        std::string rosbag_filename(_parameters->getOrDeclareParameter<std::string>("rosbag_filename", ""));
         if (!rosbag_filename.empty())
         {
             {
                 ROS_INFO_STREAM("publish topics from rosbag file: " << rosbag_filename.c_str());
-                rs2::context ctx;
-                _device = ctx.load_device(rosbag_filename.c_str());
+                _device = RSContextSingletonWrapper::getInstance().load_device(rosbag_filename.c_str());
                 _serial_no = _device.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER);
             }
             if (_device)
             {
+                bool rosbag_loop(_parameters->getOrDeclareParameter<bool>("rosbag_loop", false));
                 startDevice();
+
+                if (rosbag_loop)
+                {
+                    auto playback = _device.as<rs2::playback>(); // Object to check the playback status periodically.
+                    bool is_playing = true; // Flag to indicate if the playback is active
+
+                    while (rclcpp::ok())
+                    {
+                        // Check the current status only if the playback is not active
+                        auto status = playback.current_status();
+                        if (!is_playing && status == RS2_PLAYBACK_STATUS_STOPPED)
+                        {
+                            RCLCPP_INFO(this->get_logger(), "Bag file playback has completed and it is going to be replayed.");
+                            startDevice(); // Re-start bag file execution
+                            is_playing = true; // Set the flag to true as playback has been restarted
+                        }
+                        else if (status != RS2_PLAYBACK_STATUS_STOPPED)
+                        {
+                            // If the playback status is not stopped, it means the playback is active
+                            is_playing = true;
+                        }
+                        else
+                        {
+                            // If the playback status is stopped, set the flag to false
+                            is_playing = false;
+                        }
+
+                        // Add a small delay to prevent busy-waiting
+                        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    }
+                }
             }
         }
         else
         {
-            _initial_reset = declare_parameter("initial_reset", rclcpp::ParameterValue(false)).get<rclcpp::PARAMETER_BOOL>();
+            _initial_reset = _parameters->getOrDeclareParameter<bool>("initial_reset",false);
 
             _query_thread = std::thread([=]()
             {
@@ -309,12 +393,15 @@ void RealSenseNodeFactory::init()
                 {
                     try
                     {
-                        getDevice(_ctx.query_devices());
+                        getDevice(RSContextSingletonWrapper::getInstance().query_devices());
                         if (_device)
                         {
                             std::function<void(rs2::event_information&)> change_device_callback_function = [this](rs2::event_information& info){changeDeviceCallback(info);};
-                            _ctx.set_devices_changed_callback(change_device_callback_function);
+                            RSContextSingletonWrapper::getInstance().set_devices_changed_callback(change_device_callback_function);
+                            // unconfigure lifecycle state ends here for lifecycled node
+                            #ifndef USE_LIFECYCLE_NODE
                             startDevice();
+                            #endif
                         }
                         else
                         {
@@ -394,7 +481,10 @@ void RealSenseNodeFactory::startDevice()
         case RS455_PID:
         case RS457_PID:
         case RS555_PID:
+        case RS436_PID:
         case RS_USB2_PID:
+        case RS_D585_PID:
+        case RS_D585S_PID:
             _realSenseNode = std::unique_ptr<BaseRealSenseNode>(new BaseRealSenseNode(*this, _device, _parameters, this->get_node_options().use_intra_process_comms()));
             break;
         default:
@@ -403,15 +493,43 @@ void RealSenseNodeFactory::startDevice()
             exit(1);
         }
         _realSenseNode->publishTopics();
-
     }
     catch(const rs2::backend_error& e)
     {
         std::cerr << "Failed to start device: " << e.what() << '\n';
         _device.hardware_reset();
         _device = rs2::device();
-    }    
+    }
 }
+
+void RealSenseNodeFactory::stopDevice()
+{
+    if (_realSenseNode)
+    {
+        ROS_INFO("Stopping RealSense device...");
+        _realSenseNode.reset(); // Calls the destructor and releases the device node
+    }
+}
+
+void RealSenseNodeFactory::closeDevice()
+{
+    _is_alive = false;
+    if (_query_thread.joinable())
+    {
+        _query_thread.join();
+    }
+
+    stopDevice();
+    if (_device)
+    {
+        ROS_INFO("Closing RealSense device...");
+        RSContextSingletonWrapper::getInstance().set_devices_changed_callback([](rs2::event_information&) {});
+
+        // To go into unconfigured lifecycle state for lifecycled node we have to also disconnect the device
+        _device = rs2::device();
+    }
+}
+
 
 void RealSenseNodeFactory::tryGetLogSeverity(rs2_log_severity& severity) const
 {

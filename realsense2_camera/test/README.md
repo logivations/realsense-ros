@@ -32,6 +32,11 @@ It is expected that the class based test is used as the test format for most of 
 
 An assert command can be used to indicate if the test failed or passed. Please see the template for more info.
 
+Some of the tests have a timeout marker such as "@pytest.mark.timeout(10)". A python package "pytest-timeout" is needed if marker has to work. To install the package, the following command can be used 
+```
+pip install pytest-timeout
+``` 
+
 ### Adding a new test folder
 It is recommended to use the test folder itself for storing all the pytests. However, if the user wants to add a different folder for a set of tests, please ensure that the file name format mentioned above is followed. The folder path should be added to realsense_camera/CMakeLists.txt as below for the infra to detect the new test folder and the tests within.
 
@@ -69,11 +74,11 @@ Note: The below command helps view the steps taken by the build command.
 
 ### Prerequisites for running the tests
 
-1. The template tests require the rosbag files from librealsense.intel.comi, the following commands download them:
+1. The template tests require the rosbag files from realsenseai.com, the following commands download them:
 ```
-bag_filename="https://librealsense.intel.com/rs-tests/TestData/outdoors_1color.bag";
+bag_filename="https://realsenseai.com/rs-tests/TestData/outdoors_1color.bag";
 wget $bag_filename -P "records/"
-bag_filename="https://librealsense.intel.com/rs-tests/D435i_Depth_and_IMU_Stands_still.bag";
+bag_filename="https://realsenseai.com/rs-tests/D435i_Depth_and_IMU_Stands_still.bag";
 wget $bag_filename -P "records/"
 ```
 2. The tests use the environment variable ROSBAG_FILE_PATH as the directory that contains the rosbag files
@@ -97,9 +102,9 @@ So, all put together:
 
 ```
 sudo apt install  ros-$ROS_DISTRO-launch-pytest
-bag_filename="https://librealsense.intel.com/rs-tests/TestData/outdoors_1color.bag";
+bag_filename="https://realsenseai.com/rs-tests/TestData/outdoors_1color.bag";
 wget $bag_filename -P "records/"
-bag_filename="https://librealsense.intel.com/rs-tests/D435i_Depth_and_IMU_Stands_still.bag";
+bag_filename="https://realsenseai.com/rs-tests/D435i_Depth_and_IMU_Stands_still.bag";
 wget $bag_filename -P "records/"
 export ROSBAG_FILE_PATH=$PWD/records
 . install/local_setup.bash
@@ -127,7 +132,7 @@ The xml files mentioned by the command can be directly opened also.
 ### Running pytests directly
 
 Note :
-1. All the commands for test execution has to be executed from realsense-ros folder. For example: If the ROS2 workspace was created based on Step 3 [Option2] of [this](https://github.com/IntelRealSense/realsense-ros/blob/ros2-master/README.md#installation).
+1. All the commands for test execution has to be executed from realsense-ros folder. For example: If the ROS2 workspace was created based on Step 3 [Option2] of [this](https://github.com/realsenseai/realsense-ros/blob/ros2-master/README.md#installation).
 Then, the path to execute the tests would be ~/ros2_ws/src/realsense-ros.
 
 		cd ~/ros2_ws/src/realsense-ros

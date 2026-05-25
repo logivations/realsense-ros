@@ -2,12 +2,63 @@
 Changelog for package realsense2_description
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+4.57.8 (2026-03-27)
+-------------------
+
+4.57.7 (2026-03-24)
+-------------------
+* add release noted
+* Update package.xml
+* PR `#3485 <https://github.com/IntelRealSense/realsense-ros/issues/3485>`_ from Nir-Az: Fix GHA flow
+* install missing packages
+* PR `#3476 <https://github.com/IntelRealSense/realsense-ros/issues/3476>`_ from nivgo: Add support for Intel RealSense D436 Camera
+* typos fix
+* Add Intel realsense D436 URDF model
+* PR `#3462 <https://github.com/IntelRealSense/realsense-ros/issues/3462>`_ from remibettan: intel removed and github user changed
+* many intel removed and github user changed
+* PR `#3447 <https://github.com/IntelRealSense/realsense-ros/issues/3447>`_ from Nir-Az: Update maintainers before Realsense migration
+* update maintainers list
+* PR `#3442 <https://github.com/IntelRealSense/realsense-ros/issues/3442>`_ from remibettan/restore-minor-version-to-0: minor versions back to 0
+* minor back to 0
+* PR `#3441 <https://github.com/IntelRealSense/realsense-ros/issues/3441>`_ from remibettan/ros2-development: merging 4.57.3 to ros2-development
+* Merge tag '4.57.3' into ros2-development
+* Contributors: Nir Azkiel, Niv Goren, Remi Bettan, remibettan
+
+* Update package.xml
+* PR `#3485 <https://github.com/IntelRealSense/realsense-ros/issues/3485>`_ from Nir-Az: Fix GHA flow
+* install missing packages
+* PR `#3476 <https://github.com/IntelRealSense/realsense-ros/issues/3476>`_ from nivgo: Add support for Intel RealSense D436 Camera
+* typos fix
+* Add Intel realsense D436 URDF model
+* PR `#3462 <https://github.com/IntelRealSense/realsense-ros/issues/3462>`_ from remibettan: intel removed and github user changed
+* many intel removed and github user changed
+* PR `#3447 <https://github.com/IntelRealSense/realsense-ros/issues/3447>`_ from Nir-Az: Update maintainers before Realsense migration
+* update maintainers list
+* PR `#3442 <https://github.com/IntelRealSense/realsense-ros/issues/3442>`_ from remibettan/restore-minor-version-to-0: minor versions back to 0
+* minor back to 0
+* PR `#3441 <https://github.com/IntelRealSense/realsense-ros/issues/3441>`_ from remibettan/ros2-development: merging 4.57.3 to ros2-development
+* Merge tag '4.57.3' into ros2-development
+* Contributors: Nir Azkiel, Niv Goren, Remi Bettan, remibettan
+
+4.57.3 (2025-09-15)
+-------------------
+* PR `#3429 <https://github.com/realsenseai/realsense-ros/issues/3429>`_ from remibettan: intel removed, realsense added
+* PR `#3417 <https://github.com/realsenseai/realsense-ros/issues/3417>`_ from remibettan: Merging ros2 hkr to ros2 dev final
+* PR `#45 <https://github.com/realsenseai/realsense-ros/issues/45>`_ from remibettan: Merge ros2 dev to ros2 hkr
+* PR `#3404 <https://github.com/realsenseai/realsense-ros/issues/3404>`_ from adamwhats: Use package:// to discover meshes
+* PR `#3410 <https://github.com/realsenseai/realsense-ros/issues/3410>`_ from Nir-Az: Update copyrights
+* PR `#3401 <https://github.com/realsenseai/realsense-ros/issues/3401>`_ from ashrafk93: remove test dependencies
+* PR `#2813 <https://github.com/realsenseai/realsense-ros/issues/2813>`_ from SamerKhshiboun: Fix URDF and LPCL for SC
+* PR `#2807 <https://github.com/realsenseai/realsense-ros/issues/2807>`_ from SamerKhshiboun: Update _d585.urdf.xacro
+* PR `#2771 <https://github.com/realsenseai/realsense-ros/issues/2771>`_ from SamerKhshiboun: SC urdf
+* Contributors: Arun-Prasad-V, Ashraf Kattoura, Nir Azkiel, Remi Bettan, Samer Khshiboun, adamwhats
+
 4.55.1 (2024-05-28)
 -------------------
-* PR `#2957 <https://github.com/IntelRealSense/realsense-ros/issues/2957>`_ from hellototoro: to_urdf fun retrun a str, not a BufferedRandom
-* PR `#2953 <https://github.com/IntelRealSense/realsense-ros/issues/2953>`_ from Arun-Prasad-V: Added urdf & mesh files for D405 model
-* PR `#2841 <https://github.com/IntelRealSense/realsense-ros/issues/2841>`_ from SamerKhshiboun: Remove Dashing, Eloquent, Foxy, L500 and SR300 support
-* PR `#2817 <https://github.com/IntelRealSense/realsense-ros/issues/2817>`_ from karina-ranadive: Replaced Deprecated function mktemp to TemporaryFile
+* PR `#2957 <https://github.com/realsenseai/realsense-ros/issues/2957>`_ from hellototoro: to_urdf fun retrun a str, not a BufferedRandom
+* PR `#2953 <https://github.com/realsenseai/realsense-ros/issues/2953>`_ from Arun-Prasad-V: Added urdf & mesh files for D405 model
+* PR `#2841 <https://github.com/realsenseai/realsense-ros/issues/2841>`_ from SamerKhshiboun: Remove Dashing, Eloquent, Foxy, L500 and SR300 support
+* PR `#2817 <https://github.com/realsenseai/realsense-ros/issues/2817>`_ from karina-ranadive: Replaced Deprecated function mktemp to TemporaryFile
 * Contributors: Arun-Prasad-V, karina-ranadive, SamerKhshiboun, hellototoro
 
 4.54.1 (2023-06-27)

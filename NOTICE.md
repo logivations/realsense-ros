@@ -1,11 +1,11 @@
-﻿# **Intel® RealSense™ ROS Wrapper Third Party Programs**
-## This file specifies all 3rd party SW components used for Intel® RealSense™ ROS Wrapper and the inbound license for each of these 3rd party components.
+﻿# **RealSense™ ROS Wrapper Third Party Programs**
+## This file specifies all 3rd party SW components used for RealSense™ ROS Wrapper and the inbound license for each of these 3rd party components.
 
 # **Apache License 2.0 Third Party Programs**
 
 |Component|Home Page|License|copyright|
 | :- | :- | :- | :- |
-|librealsense2|<p><https://github.com/IntelRealSense/librealsense/></p><p></p>|Apache License 2.0|None|
+|librealsense2|<p><https://github.com/realsenseai/librealsense/></p><p></p>|Apache License 2.0|None|
 |Rclcpp|<p><https://github.com/ros2/rclcpp></p><p> </p>|Apache License 2.0|None|
 |rclcpp\_components|<p><https://github.com/ros2/rclcpp></p><p> </p>|Apache License 2.0|None|
 |builtin\_interfaces|<p><https://github.com/ros2/rcl_interfaces></p><p></p>|Apache License 2.0|None|
@@ -107,6 +107,8 @@ BSD 3-clause License Third Party Programs
 |tf2|<p><https://github.com/ros2/geometry2/></p><p></p>|BSD 3-clause|<p>Copyright (c) 2008, Willow Garage, Inc.</p><p></p>|
 |tf2\_ros|<p><https://github.com/ros2/geometry2/></p><p></p>|BSD 3-clause|<p>Copyright (c) 2008, Willow Garage, Inc.</p><p></p>|
 |<p>diagnostic\_updater</p><p></p>|<p><https://github.com/ros/diagnostics></p><p></p>|BSD 3-clause|<p>Copyright 2008 - 2012, Willow Garage, Inc.</p><p>`          `2012 - 2022, Open Source Robotics Foundation and contributors</p>|
+|paho-mqtt|<p><https://pypi.org/project/paho-mqtt/></p><p></p>|BSD 3-clause|<p></p><p></p>|
+
 ## **BSD 3-clause** 
 Note: This license has also been called the “New BSD License” or “Modified BSD License”. See also the [2-clause BSD License](https://opensource.org/license/bsd-2-clause/).
 

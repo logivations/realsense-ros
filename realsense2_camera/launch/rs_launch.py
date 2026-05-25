@@ -1,4 +1,4 @@
-# Copyright 2023 Intel Corporation. All Rights Reserved.
+# Copyright 2023 RealSense, Inc. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,9 +17,8 @@ import os
 import yaml
 from launch import LaunchDescription
 import launch_ros.actions
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, OpaqueFunction, LogInfo
 from launch.substitutions import LaunchConfiguration
-
 
 configurable_parameters = [{'name': 'camera_name',                  'default': 'camera', 'description': 'camera unique name'},
                            {'name': 'camera_namespace',             'default': 'camera', 'description': 'namespace for camera'},
@@ -31,6 +30,7 @@ configurable_parameters = [{'name': 'camera_name',                  'default': '
                            {'name': 'initial_reset',                'default': 'false', 'description': "''"},
                            {'name': 'accelerate_gpu_with_glsl',     'default': "false", 'description': 'enable GPU acceleration with GLSL'},
                            {'name': 'rosbag_filename',              'default': "''", 'description': 'A realsense bagfile to run from as a device'},
+                           {'name': 'rosbag_loop',                  'default': 'false', 'description': 'Enable loop playback when playing a bagfile'},
                            {'name': 'log_level',                    'default': 'info', 'description': 'debug log level [DEBUG|INFO|WARN|ERROR|FATAL]'},
                            {'name': 'output',                       'default': 'screen', 'description': 'pipe node output [screen|log]'},
                            {'name': 'enable_color',                 'default': 'true', 'description': 'enable color stream'},
@@ -47,7 +47,8 @@ configurable_parameters = [{'name': 'camera_name',                  'default': '
                            {'name': 'depth_module.infra_format',    'default': 'RGB8', 'description': 'infra0 stream format'},
                            {'name': 'depth_module.infra1_format',   'default': 'Y8', 'description': 'infra1 stream format'},
                            {'name': 'depth_module.infra2_format',   'default': 'Y8', 'description': 'infra2 stream format'},
-                           {'name': 'depth_module.color_profile',   'default': '0,0,0', 'description': 'Depth module color stream profile'},
+                           {'name': 'depth_module.color_profile',   'default': '0,0,0', 'description': 'Depth module color stream profile for d405'},
+                           {'name': 'depth_module.color_format',    'default': 'RGB8', 'description': 'color stream format for d405'},
                            {'name': 'depth_module.exposure',        'default': '8500', 'description': 'Depth module manual exposure value'},
                            {'name': 'depth_module.gain',            'default': '16', 'description': 'Depth module manual gain value'},
                            {'name': 'depth_module.hdr_enabled',     'default': 'false', 'description': 'Depth module hdr enablement flag. Used for hdr_merge filter'},
@@ -60,10 +61,11 @@ configurable_parameters = [{'name': 'camera_name',                  'default': '
                            {'name': 'depth_module.inter_cam_sync_mode',               'default': "0", 'description': '[0-Default, 1-Master, 2-Slave]'},
                            {'name': 'enable_rgbd',                  'default': 'false', 'description': "'enable rgbd topic'"},
                            {'name': 'enable_gyro',                  'default': 'false', 'description': "'enable gyro stream'"},
-                           {'name': 'enable_accel',                 'default': 'false', 'description': "'enable accel stream'"},
-                           {'name': 'gyro_fps',                     'default': '0', 'description': "''"},
+                           {'name': 'enable_accel',                 'default': 'false', 'description': "'enable accel stream'"},                           
                            {'name': 'enable_motion',                'default': 'false', 'description': "'enable motion stream (IMU) for DDS devices'"},
+                           {'name': 'gyro_fps',                     'default': '0', 'description': "''"},
                            {'name': 'accel_fps',                    'default': '0', 'description': "''"},
+                           {'name': 'motion_fps',                   'default': '0', 'description': "'motion stream samples per second'"},
                            {'name': 'unite_imu_method',             'default': "0", 'description': '[0-None, 1-copy, 2-linear_interpolation]'},
                            {'name': 'clip_distance',                'default': '-2.', 'description': "''"},
                            {'name': 'angular_velocity_cov',         'default': '0.01', 'description': "''"},
@@ -79,6 +81,8 @@ configurable_parameters = [{'name': 'camera_name',                  'default': '
                            {'name': 'align_depth.enable',           'default': 'false', 'description': 'enable align depth filter'},
                            {'name': 'colorizer.enable',             'default': 'false', 'description': 'enable colorizer filter'},
                            {'name': 'decimation_filter.enable',     'default': 'false', 'description': 'enable_decimation_filter'},
+                           {'name': 'rotation_filter.enable',       'default': 'false', 'description': 'enable rotation_filter'},
+                           {'name': 'rotation_filter.rotation',     'default': '0.0',   'description': 'rotation value: 0.0, 90.0, -90.0, 180.0'},
                            {'name': 'spatial_filter.enable',        'default': 'false', 'description': 'enable_spatial_filter'},
                            {'name': 'temporal_filter.enable',       'default': 'false', 'description': 'enable_temporal_filter'},
                            {'name': 'disparity_filter.enable',      'default': 'false', 'description': 'enable_disparity_filter'},
@@ -87,6 +91,15 @@ configurable_parameters = [{'name': 'camera_name',                  'default': '
                            {'name': 'wait_for_device_timeout',      'default': '-1.', 'description': 'Timeout for waiting for device to connect (Seconds)'},
                            {'name': 'reconnect_timeout',            'default': '6.', 'description': 'Timeout(seconds) between consequtive reconnection attempts'},
                            {'name': 'color_freq_tolerance',         'default': '0.1', 'description': 'Tolerance with which bounds must be satisfied'},
+                           {'name': 'base_frame_id',                'default': 'link', 'description': 'Root frame of the sensors transform tree'},
+                           {'name': 'tf_prefix',                    'default': '', 'description': 'prefix to be prepended to all frame IDs'},
+                           {'name': 'decimation_filter.filter_magnitude', 'default': '2', 'description': 'decimation filter magnitude'},
+                           {'name': 'enable_safety',                'default': 'false', 'description': "'enable safety stream'"},
+                           {'name': 'safety_camera.safety_mode',    'default': '0', 'description': '[int] 0-Run, 1-Standby, 2-Service'},
+                           {'name': 'enable_labeled_point_cloud',   'default': 'false', 'description': "'enable labeled point cloud stream'"},
+                           {'name': 'depth_mapping_camera.labeled_point_cloud_profile', 'default': '0,0,0', 'description': "'Label PointCloud stream profile'"},
+                           {'name': 'enable_occupancy',             'default': 'false', 'description': "'enable occupancy stream'"},
+                           {'name': 'depth_mapping_camera.occupancy_profile', 'default': '0,0,0', 'description': "'Occupancy stream profile'"},
                           ]
 
 def declare_configurable_parameters(parameters):
@@ -103,7 +116,34 @@ def launch_setup(context, params, param_name_suffix=''):
     _config_file = LaunchConfiguration('config_file' + param_name_suffix).perform(context)
     params_from_file = {} if _config_file == "''" else yaml_to_dict(_config_file)
 
+    # Get list of supported parameters
+    supported_params = set(param['name'] for param in configurable_parameters)
+    
+    # Check for unsupported parameters in command line arguments
+    # Warn for any launch arguments not in supported_params
+    for param_name in context.launch_configurations.keys():
+        if param_name not in supported_params:
+            print(f"\033[33mWarning: Parameter '{param_name}' is not supported. Supported parameters are:\n{sorted(supported_params)}\033[0m")
+    
+    # Check for unsupported parameters in config file
+    if params_from_file:
+        for param_name in params_from_file.keys():
+            if param_name not in supported_params:
+                print(f"\033[33mWarning: Parameter '{param_name}' in config file is not supported. Supported parameters are:\n{sorted(supported_params)}\033[0m")
+
+    # Load lifecycle nodes setting from YAML dynamically generated by CMAKE instead of environment variable
+    lifecycle_param_file = os.path.join(
+        os.path.dirname(__file__), '..', 'config', 'global_settings.yaml'
+    )
+    lifecycle_params = yaml_to_dict(lifecycle_param_file)
+    use_lifecycle_node = lifecycle_params.get("use_lifecycle_node", False)
+
     _output = LaunchConfiguration('output' + param_name_suffix)
+    
+    # Dynamically choose Node or LifecycleNode
+    node_action = launch_ros.actions.LifecycleNode if use_lifecycle_node else launch_ros.actions.Node
+    log_message = "Launching as LifecycleNode" if use_lifecycle_node else "Launching as Normal ROS Node"
+
     if(os.getenv('ROS_DISTRO') == 'foxy'):
         # Foxy doesn't support output as substitution object (LaunchConfiguration object)
         # but supports it as string, so we fetch the string from this substitution object
@@ -111,7 +151,8 @@ def launch_setup(context, params, param_name_suffix=''):
         _output = context.perform_substitution(_output)
 
     return [
-        launch_ros.actions.Node(
+        LogInfo(msg=f"🚀 {log_message}"),
+        node_action(
             package='realsense2_camera',
             namespace=LaunchConfiguration('camera_namespace' + param_name_suffix),
             name=LaunchConfiguration('camera_name' + param_name_suffix),

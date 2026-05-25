@@ -1,4 +1,4 @@
-// Copyright 2023 Intel Corporation. All Rights Reserved.
+// Copyright 2023 RealSense, Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -96,6 +96,10 @@ void BaseRealSenseNode::getParameters()
     _parameters_names.push_back(param_name);
 
     _frames_to_skip = _color_fps / _publish_fps;
+
+    param_name = std::string("tf_prefix");
+    _tf_prefix = _parameters->setParam<std::string>(param_name, "");
+    _parameters_names.push_back(param_name);
 
 #if defined (ACCELERATE_GPU_WITH_GLSL)
     param_name = std::string("accelerate_gpu_with_glsl");
