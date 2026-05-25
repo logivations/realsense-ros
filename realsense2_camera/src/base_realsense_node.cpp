@@ -560,8 +560,11 @@ void BaseRealSenseNode::imu_callback(rs2::frame frame)
 
 void BaseRealSenseNode::frame_callback(rs2::frame frame)
 {
-    //we know that we have less depth frames than color frames, so we can skip some frames after a depth frame
-    if (_frame_counter < _frames_to_skip - 2)
+    // Only subsample when the source rate is meaningfully higher than the
+    // publish rate. _frames_to_skip is unsigned; when it is < 2 the original
+    // `_frames_to_skip - 2` underflowed and silently dropped every frame.
+    // Setting publish_fps >= color_fps is now the natural "no throttling" mode.
+    if (_frames_to_skip >= 2 && _frame_counter < _frames_to_skip - 2)
     {
         _frame_counter++;
         return;
