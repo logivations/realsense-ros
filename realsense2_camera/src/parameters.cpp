@@ -84,14 +84,35 @@ void BaseRealSenseNode::getParameters()
     _parameters_names.push_back(param_name);
 
     param_name = std::string("publish_fps");
-    _publish_fps = _parameters->setParam<double>(param_name, 2.0);
+    _publish_fps = _parameters->setParam<double>(param_name, 6.0);
     _parameters_names.push_back(param_name);
 
     param_name = std::string("color_fps");
-    _color_fps = _parameters->setParam<double>(param_name, 6.0);
+    _color_fps = _parameters->setParam<double>(param_name, 30.0);
+    _parameters_names.push_back(param_name);
+
+    param_name = std::string("color_freq_tolerance");
+    _color_freq_tolerance = _parameters->setParam<double>(param_name, 0.1);
     _parameters_names.push_back(param_name);
 
     _frames_to_skip = _color_fps / _publish_fps;
+
+#if defined (ACCELERATE_GPU_WITH_GLSL)
+    param_name = std::string("accelerate_gpu_with_glsl");
+     _parameters->setParam<bool>(param_name, false,
+                    [this](const rclcpp::Parameter& parameter)
+                    {
+                        bool temp_value = parameter.get_value<bool>();
+                        if (_accelerate_gpu_with_glsl != temp_value)
+                        {
+                            _accelerate_gpu_with_glsl = temp_value;
+                            std::lock_guard<std::mutex> lock_guard(_profile_changes_mutex);
+                            _is_accelerate_gpu_with_glsl_changed = true;
+                        }
+                        _cv_mpc.notify_one();
+                    });
+    _parameters_names.push_back(param_name);
+#endif
 
 }
 
