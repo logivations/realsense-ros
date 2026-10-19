@@ -1,4 +1,4 @@
-// Copyright 2023 Intel Corporation. All Rights Reserved.
+// Copyright 2023 RealSense, Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -66,6 +66,16 @@ void BaseRealSenseNode::getParameters()
     _clipping_distance = _parameters->setParam<double>(param_name, -1.0);
     _parameters_names.push_back(param_name);
 
+    param_name = std::string("occupancy_occupied_threshold");
+    _occupancy_occupied_threshold = static_cast<int>(_parameters->setParam<int>(param_name, 100));
+    if (_occupancy_occupied_threshold < 1 || _occupancy_occupied_threshold > 100)
+    {
+        ROS_WARN_STREAM("occupancy_occupied_threshold " << _occupancy_occupied_threshold
+                        << " out of [1,100]; using 100");
+        _occupancy_occupied_threshold = 100;
+    }
+    _parameters_names.push_back(param_name);
+
     param_name = std::string("linear_accel_cov");
     _linear_accel_cov = _parameters->setParam<double>(param_name, 0.01);
     _parameters_names.push_back(param_name);
@@ -96,6 +106,10 @@ void BaseRealSenseNode::getParameters()
     _parameters_names.push_back(param_name);
 
     _frames_to_skip = _color_fps / _publish_fps;
+
+    param_name = std::string("tf_prefix");
+    _tf_prefix = _parameters->setParam<std::string>(param_name, "");
+    _parameters_names.push_back(param_name);
 
 #if defined (ACCELERATE_GPU_WITH_GLSL)
     param_name = std::string("accelerate_gpu_with_glsl");
@@ -164,6 +178,10 @@ void BaseRealSenseNode::setDynamicParams()
                             [this](const rclcpp::Parameter& parameter)
                             {
                                 _imu_sync_method = imu_sync_method(parameter.get_value<int>());
+                                {
+                                    std::lock_guard<std::mutex> lock(_imu_callback_mutex);
+                                    _imu_history.clear();
+                                }
                                 ROS_WARN("For the 'unite_imu_method' param update to take effect, "
                                          "re-enable either gyro or accel stream.");
                             }, crnt_descriptor);

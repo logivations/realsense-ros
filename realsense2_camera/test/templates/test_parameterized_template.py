@@ -1,4 +1,4 @@
-# Copyright 2023 Intel Corporation. All Rights Reserved.
+# Copyright 2023 RealSense, Inc. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ from pytest_rs_utils import get_node_heirarchy
 
 
 
-test_params = {"rosbag_filename":get_rosbag_file_path("outdoors_1color.bag"),
+test_params = {"rosbag_filename":get_rosbag_file_path("outdoors_1color.db3"),
     'camera_name': 'TestCamera1',
     'color_width': '0',
     'color_height': '0',
@@ -46,7 +46,7 @@ test_params = {"rosbag_filename":get_rosbag_file_path("outdoors_1color.bag"),
     'infra_height': '0',
     }
 
-test_params1 = {"rosbag_filename":get_rosbag_file_path("D435i_Depth_and_IMU_Stands_still.bag"),
+test_params1 = {"rosbag_filename":get_rosbag_file_path("D435i_Depth_and_IMU_Stands_still.db3"),
     'camera_name': 'TestCamera2',
     'color_width': '0',
     'color_height': '0',

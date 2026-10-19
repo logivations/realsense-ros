@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 
 <!--
-# Copyright 2023 Intel Corporation. All Rights Reserved.
+# Copyright 2023 RealSense, Inc. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 -->
 
 <!--
-This is the URDF model for the Intel RealSense 435i camera, in it's
+This is the URDF model for the RealSense 435i camera, in it's
 aluminum peripherial evaluation case.
 -->
 
@@ -25,8 +25,8 @@ aluminum peripherial evaluation case.
   <xacro:include filename="$(find realsense2_description)/urdf/_d435.urdf.xacro"/>
   <xacro:include filename="$(find realsense2_description)/urdf/_d435i_imu_modules.urdf.xacro"/>
 
-  <xacro:macro name="sensor_d435i" params="parent *origin name:=camera use_nominal_extrinsics:=false">
-    <xacro:sensor_d435 parent="${parent}" name="${name}" use_nominal_extrinsics="${use_nominal_extrinsics}">
+  <xacro:macro name="sensor_d435i" params="parent *origin name:=camera use_nominal_extrinsics:=false add_plug:=false use_mesh:=true">
+    <xacro:sensor_d435 parent="${parent}" name="${name}" use_nominal_extrinsics="${use_nominal_extrinsics}" add_plug="${add_plug}" use_mesh="${use_mesh}">
       <xacro:insert_block name="origin" />
     </xacro:sensor_d435>
     <xacro:d435i_imu_modules name="${name}" use_nominal_extrinsics="${use_nominal_extrinsics}"/>

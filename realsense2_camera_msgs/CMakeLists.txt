@@ -1,4 +1,4 @@
-# Copyright 2023 Intel Corporation. All Rights Reserved.
+# Copyright 2023 RealSense, Inc. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 
 project(realsense2_camera_msgs)
 
@@ -43,8 +43,15 @@ set(msg_files
 rosidl_generate_interfaces(${PROJECT_NAME}
   ${msg_files}
   "srv/DeviceInfo.srv"
+  "srv/SafetyPresetRead.srv"
+  "srv/SafetyPresetWrite.srv"
+  "srv/SafetyInterfaceConfigRead.srv"
+  "srv/SafetyInterfaceConfigWrite.srv"
   "srv/CalibConfigRead.srv"
   "srv/CalibConfigWrite.srv"
+  "srv/ApplicationConfigRead.srv"
+  "srv/ApplicationConfigWrite.srv"
+  "srv/HardwareMonitorCommandSend.srv"
   "action/TriggeredCalibration.action"
   DEPENDENCIES builtin_interfaces std_msgs sensor_msgs
   ADD_LINTER_TESTS

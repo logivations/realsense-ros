@@ -1,4 +1,4 @@
-// Copyright 2023 Intel Corporation. All Rights Reserved.
+// Copyright 2023 RealSense, Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -233,6 +233,12 @@ void SensorParams::registerDynamicOptions(rs2::options sensor, const std::string
         rs2_option option = static_cast<rs2_option>(i);
         const std::string option_name(module_name + "." + create_graph_resource_name(rs2_option_to_string(option)));
         if (!sensor.supports(option) || sensor.is_option_read_only(option))
+        {
+            continue;
+        }
+        // Skip RS2_OPTION_REGION_OF_INTEREST as it's handled separately via registerAutoExposureROIOptions()
+        // This option cannot be read using get_option() API - it requires specialized rect handling
+        if (i == RS2_OPTION_REGION_OF_INTEREST)
         {
             continue;
         }

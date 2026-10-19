@@ -1,4 +1,4 @@
-# Copyright 2024 Intel Corporation. All Rights Reserved.
+# Copyright 2024 RealSense, Inc. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 project(realsense2_camera)
 
 # Default to C99
@@ -30,6 +30,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 option(BUILD_WITH_OPENMP "Use OpenMP" OFF)
 option(SET_USER_BREAK_AT_STARTUP "Set user wait point in startup (for debug)" OFF)
+# Define an option to enable or disable lifecycle nodes
+option(USE_LIFECYCLE_NODE "Enable lifecycle nodes (ON/OFF)" OFF)
 
 # Compiler Defense Flags
 if(UNIX OR APPLE)
@@ -104,28 +106,58 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(builtin_interfaces REQUIRED)
-find_package(cv_bridge REQUIRED)
-find_package(image_transport REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
-find_package(rclcpp_components REQUIRED)
 find_package(realsense2_camera_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(std_msgs REQUIRED)
-find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(diagnostic_updater REQUIRED)
 find_package(OpenCV REQUIRED COMPONENTS core)
-find_package(fastrtps REQUIRED)  # TODO: LRS-1203 - This is a workaround, till librealsense2 cmake config will be fixed
 
-find_package(realsense2 2.56.0)
+find_package(rclcpp_components REQUIRED)
+if(TARGET rclcpp_components::component)
+  set(RCLCPP_COMPONENT_TARGET rclcpp_components::component)
+else()
+  # Foxy fallback
+  set(RCLCPP_COMPONENT_TARGET)
+endif()
+
+
+find_package(image_transport REQUIRED)
+if(TARGET image_transport::image_transport)
+  set(IMAGE_TRANSPORT_TARGET image_transport::image_transport)
+else()
+  # Foxy fallback
+  set(IMAGE_TRANSPORT_TARGET ${image_transport_LIBRARIES})
+endif()
+
+
+find_package(cv_bridge REQUIRED)
+if(TARGET cv_bridge::cv_bridge)
+  set(CV_BRIDGE_TARGET cv_bridge::cv_bridge)
+else()
+  # Foxy fallback
+  set(CV_BRIDGE_TARGET ${cv_bridge_LIBRARIES})
+endif()
+
+
+find_package(sensor_msgs REQUIRED)
+if(TARGET sensor_msgs::sensor_msgs_library)
+  set(SENSOR_MSGS_TARGET sensor_msgs::sensor_msgs_library)
+else()
+  # Foxy fallback
+  set(SENSOR_MSGS_TARGET ${sensor_msgs_LIBRARIES})
+endif()
+
+find_package(realsense2 2.59.0)
 if (BUILD_ACCELERATE_GPU_WITH_GLSL)
-  find_package(realsense2-gl 2.56.0)
+  find_package(realsense2-gl 2.59.0)
 endif()
 if(NOT realsense2_FOUND)
-    message(FATAL_ERROR "\n\n Intel RealSense SDK 2.0 is missing, please install it from https://github.com/IntelRealSense/librealsense/releases\n\n")
+    message(FATAL_ERROR "\n\n RealSense SDK 2.0 is missing, please install it from https://github.com/realsenseai/librealsense/releases\n\n")
 endif()
 
 #set(CMAKE_NO_SYSTEM_FROM_IMPORTED true)
@@ -145,10 +177,14 @@ set(SOURCES
     src/dynamic_params.cpp
     src/sensor_params.cpp
     src/named_filter.cpp
+    src/pointcloud_filter.cpp
+    src/align_depth_filter.cpp
     src/profile_manager.cpp
     src/image_publisher.cpp
     src/tfs.cpp
     src/actions.cpp
+    src/safety.cpp
+    src/ros_param_backend.cpp
   )
 
 if (BUILD_ACCELERATE_GPU_WITH_GLSL)
@@ -161,25 +197,26 @@ endif()
 if("$ENV{ROS_DISTRO}" STREQUAL "foxy")
   message(STATUS "Build for ROS2 Foxy")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DFOXY")
-  set(SOURCES "${SOURCES}" src/ros_param_backend.cpp)
 elseif("$ENV{ROS_DISTRO}" STREQUAL "humble")
   message(STATUS "Build for ROS2 Humble")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHUMBLE")
-  set(SOURCES "${SOURCES}" src/ros_param_backend.cpp)
 elseif("$ENV{ROS_DISTRO}" STREQUAL "iron")
   message(STATUS "Build for ROS2 Iron")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DIRON")
-  set(SOURCES "${SOURCES}" src/ros_param_backend.cpp)
 elseif("$ENV{ROS_DISTRO}" STREQUAL "rolling")
   message(STATUS "Build for ROS2 Rolling")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DROLLING")
-  set(SOURCES "${SOURCES}" src/ros_param_backend.cpp)
 elseif("$ENV{ROS_DISTRO}" STREQUAL "jazzy")
   message(STATUS "Build for ROS2 Jazzy")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DJAZZY")
-  set(SOURCES "${SOURCES}" src/ros_param_backend.cpp)
+elseif("$ENV{ROS_DISTRO}" STREQUAL "kilted")
+  message(STATUS "Build for ROS2 Kilted")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DKILTED")
+elseif("$ENV{ROS_DISTRO}" STREQUAL "lyrical")
+  message(STATUS "Build for ROS2 Lyrical")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DLYRICAL")
 else()
-  message(FATAL_ERROR "Unsupported ROS Distribution: " "$ENV{ROS_DISTRO}")
+  message(WARNING "Unsupported ROS Distribution: " "$ENV{ROS_DISTRO}")
 endif()
 
 # The header 'cv_bridge/cv_bridge.hpp' was added in version 3.3.0. For older
@@ -198,6 +235,7 @@ if (BUILD_ACCELERATE_GPU_WITH_GLSL)
 endif()
 
 set(INCLUDES
+    include/context_singleton_wrapper.h
     include/constants.h
     include/realsense_node_factory.h
     include/base_realsense_node.h
@@ -206,6 +244,8 @@ set(INCLUDES
     include/dynamic_params.h
     include/sensor_params.h
     include/named_filter.h
+    include/pointcloud_filter.h
+    include/align_depth_filter.h
     include/ros_param_backend.h
     include/profile_manager.h
     include/image_publisher.h)
@@ -256,20 +296,101 @@ set(dependencies
   diagnostic_updater
 )
 
+set (targets
+  ${CV_BRIDGE_TARGET}
+  ${IMAGE_TRANSPORT_TARGET}
+  rclcpp::rclcpp
+  ${RCLCPP_COMPONENT_TARGET}
+  ${realsense2_camera_msgs_TARGETS}
+  ${std_srvs_TARGETS}
+  ${std_msgs_TARGETS}
+  ${SENSOR_MSGS_TARGET}
+  ${nav_msgs_TARGETS}
+  tf2::tf2
+  tf2_ros::tf2_ros
+  diagnostic_updater::diagnostic_updater
+)
+
 if (BUILD_ACCELERATE_GPU_WITH_GLSL)
   list(APPEND dependencies realsense2-gl)
+  list(APPEND targets realsense2-gl::realsense2-gl)
 else()
   list(APPEND dependencies realsense2)
+  list(APPEND targets realsense2::realsense2)
 endif()
 
-ament_target_dependencies(${PROJECT_NAME}
-  ${dependencies}
+# If the flag is enabled, define the macro
+if(USE_LIFECYCLE_NODE)
+    find_package(rclcpp_lifecycle REQUIRED)
+    find_package(lifecycle_msgs REQUIRED)
+    list(APPEND dependencies rclcpp_lifecycle lifecycle_msgs)
+    list(APPEND targets
+        rclcpp_lifecycle::rclcpp_lifecycle
+        lifecycle_msgs::lifecycle_msgs__rosidl_typesupport_cpp)
+    add_definitions(-DUSE_LIFECYCLE_NODE)
+    message(STATUS "USE_LIFECYCLE_NODE is ENABLED")
+
+    # Create a configuration file for the launch file
+    file(WRITE "${CMAKE_BINARY_DIR}/global_settings.yaml"
+        "use_lifecycle_node: true\n")
+else()
+    file(WRITE "${CMAKE_BINARY_DIR}/global_settings.yaml"
+        "use_lifecycle_node: false\n")
+endif()
+
+install(FILES "${CMAKE_BINARY_DIR}/global_settings.yaml"
+    DESTINATION share/${PROJECT_NAME}/config)
+
+target_link_libraries(${PROJECT_NAME}
+  ${targets}
 )
+
+# Workaround: librealsense built with bundled DDS exports its own fastcdr
+# symbols from librealsense2.so, clashing at runtime with ROS 2's fastdds.
+# rclcpp_components dlopens the plugin .so with RTLD_LOCAL, so we must link
+# libfastdds into the executable itself to put it in the global namespace
+# before librealsense loads. Linux-only.
+#
+# Only applies when librealsense was built with bundled DDS (BUILD_WITH_DDS=ON
+# upstream). In that case its installed realsense2Config.cmake transitively
+# calls `find_dependency(fastcdr CONFIG REQUIRED)`, which sets fastcdr_FOUND
+# after find_package(realsense2) above. Plain (non-DDS) librealsense doesn't
+# pull fastcdr in, fastcdr_FOUND stays unset, and we skip the link so users
+# on Cyclone DDS / RMW Zenoh don't end up with a FastDDS NEEDED entry on
+# the wrapper executable.
+#
+# We intentionally do NOT declare rmw_fastrtps_cpp / FastDDS in package.xml:
+# the bundled-DDS workaround is only needed when librealsense itself is built
+# with DDS, in which case its own package's transitive dependencies are
+# expected to make libfastdds/libfastrtps available. If neither is found at
+# configure time, find_library returns NOTFOUND and the workaround silently
+# no-ops — users on Cyclone/Zenoh with a non-DDS librealsense (the common
+# case) aren't forced to install FastDDS via rosdep.
+if(fastcdr_FOUND AND UNIX AND NOT APPLE)
+  # Humble and Jazzy still ship the library as libfastrtps.so; it was renamed
+  # to libfastdds.so in Kilted. find_library returns the first match, so
+  # try fastdds first (Kilted/Lyrical/Rolling), fall through to fastrtps
+  # (Humble/Jazzy).
+  find_library(FASTDDS_LIBRARY NAMES fastdds fastrtps)
+endif()
+function(_rs_link_fastdds_workaround target)
+  if(FASTDDS_LIBRARY)
+    # -Wl,--no-as-needed forces a NEEDED entry on the executable so the .so
+    # loads at process start (before librealsense). This is a load-order fix
+    # only: libfastdds/libfastrtps is inert without a DomainParticipant, so
+    # users on Cyclone DDS / RMW Zenoh get the .so in their address space
+    # but no FastDDS threads or participants are created. ROS only spins
+    # FastDDS up when RMW_IMPLEMENTATION selects rmw_fastrtps_cpp.
+    target_link_libraries(${target}
+      "-Wl,--no-as-needed" ${FASTDDS_LIBRARY} "-Wl,--as-needed")
+  endif()
+endfunction()
 
 rclcpp_components_register_node(${PROJECT_NAME}
   PLUGIN "realsense2_camera::RealSenseNodeFactory"
   EXECUTABLE realsense2_camera_node
 )
+_rs_link_fastdds_workaround(realsense2_camera_node)
 
 if(BUILD_TOOLS)
 
@@ -277,6 +398,7 @@ if(BUILD_TOOLS)
   PLUGIN "rs2_ros::tools::frame_latency::FrameLatencyNode"
   EXECUTABLE realsense2_frame_latency_node
   )
+  _rs_link_fastdds_workaround(realsense2_frame_latency_node)
 
 endif()
 
@@ -294,13 +416,13 @@ install(
 )
 
 # Install launch files
-install(DIRECTORY 
+install(DIRECTORY
     launch
     DESTINATION share/${PROJECT_NAME}
     )
 
 # Install example files
-install(DIRECTORY 
+install(DIRECTORY
     examples
     DESTINATION share/${PROJECT_NAME}
 )
@@ -320,14 +442,21 @@ if(BUILD_TESTING)
           $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
           $<INSTALL_INTERFACE:include>
        )
-       ament_target_dependencies(${_test_name}
-          std_srvs
-          std_msgs
+       target_link_libraries(${_test_name}
+          std_srvs::std_srvs__rosidl_typesupport_cpp
+          std_msgs::std_msgs__rosidl_typesupport_cpp
        )
        #target_link_libraries(${_test_name} name_of_local_library)
     endforeach()
   endforeach()
 
+  # Unit tests for occupancy grid utilities
+  ament_add_gtest(test_occupancy_grid_utils test/unit/test_occupancy_grid_utils.cpp)
+  target_include_directories(test_occupancy_grid_utils PRIVATE include)
+
+  # Unit tests for the MAP1 self-describing occupancy payload parser
+  ament_add_gtest(test_occupancy_map1 test/unit/test_occupancy_map1.cpp)
+  target_include_directories(test_occupancy_map1 PRIVATE include)
 
   find_package(ament_cmake_pytest REQUIRED)
   set(_pytest_folders
@@ -343,7 +472,7 @@ if(BUILD_TESTING)
     get_filename_component(_test_name ${file} NAME_WE)
     ament_add_pytest_test(${_test_name} ${file}
       APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_SOURCE_DIR}/test/utils:${CMAKE_SOURCE_DIR}/launch:${CMAKE_SOURCE_DIR}/scripts
-      TIMEOUT 60
+      TIMEOUT 120
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     )
     endforeach()

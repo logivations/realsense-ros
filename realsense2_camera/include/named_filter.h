@@ -1,4 +1,4 @@
-// Copyright 2023 Intel Corporation. All Rights Reserved.
+// Copyright 2023 RealSense, Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,33 +46,5 @@ namespace realsense2_camera
             std::vector<std::string> _parameters_names;
             rclcpp::Logger _logger;
 
-    };
-
-    class PointcloudFilter : public NamedFilter
-    {
-        public:
-            PointcloudFilter(std::shared_ptr<rs2::filter> filter, rclcpp::Node& node, std::shared_ptr<Parameters> parameters, rclcpp::Logger logger, bool is_enabled=false);
-        
-            void setPublisher();
-            void Publish(rs2::points pc, const rclcpp::Time& t, const rs2::frameset& frameset, const std::string& frame_id);
-
-        private:
-            void setParameters();
-
-        private:
-            bool _is_enabled_pc;
-            rclcpp::Node& _node;
-            bool _allow_no_texture_points;
-            bool _ordered_pc;
-            std::mutex _mutex_publisher;
-            rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr _pointcloud_publisher;
-            std::string _pointcloud_qos;
-    };
-
-    class AlignDepthFilter : public NamedFilter
-    {
-        public:
-            AlignDepthFilter(std::shared_ptr<rs2::filter> filter, std::function<void(const rclcpp::Parameter&)> update_align_depth_func,
-                std::shared_ptr<Parameters> parameters, rclcpp::Logger logger, bool is_enabled = false);
     };
 }

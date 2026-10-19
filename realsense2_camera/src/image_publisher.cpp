@@ -1,4 +1,4 @@
-// Copyright 2023 Intel Corporation. All Rights Reserved.
+// Copyright 2023 RealSense, Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 using namespace realsense2_camera;
 
 // --- image_rcl_publisher implementation ---
-image_rcl_publisher::image_rcl_publisher( rclcpp::Node & node,
+image_rcl_publisher::image_rcl_publisher( RosNodeBase & node,
                                           const std::string & topic_name,
                                           const rmw_qos_profile_t & qos )
 {
@@ -41,8 +41,17 @@ image_transport_publisher::image_transport_publisher( rclcpp::Node & node,
                                                       const std::string & topic_name,
                                                       const rmw_qos_profile_t & qos )
 {
+#if defined( LYRICAL ) || defined( ROLLING )
+    // On Rolling/Lyrical, image_transport::create_publisher deduces NodeT
+    // from a Node reference (it then calls node.get_node_base_interface()),
+    // and the QoS argument is rclcpp::QoS rather than rmw_qos_profile_t.
+    rclcpp::QoS rclcpp_qos( rclcpp::QoSInitialization::from_rmw( qos ), qos );
+    image_publisher_impl = std::make_shared< image_transport::Publisher >(
+        image_transport::create_publisher( node, topic_name, rclcpp_qos ) );
+#else
     image_publisher_impl = std::make_shared< image_transport::Publisher >(
         image_transport::create_publisher( &node, topic_name, qos ) );
+#endif
 }
 void image_transport_publisher::publish( sensor_msgs::msg::Image::UniquePtr image_ptr )
 {

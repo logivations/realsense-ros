@@ -1,4 +1,4 @@
-// Copyright 2023 Intel Corporation. All Rights Reserved.
+// Copyright 2023 RealSense, Inc. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -51,6 +51,7 @@ namespace realsense2_camera
             rmw_qos_profile_t getInfoQOS(const stream_index_pair& sip) const;
 
         protected:
+            virtual std::map<stream_index_pair, rs2::stream_profile> getFallbackProfiles();
             std::map<stream_index_pair, rs2::stream_profile> getDefaultProfiles();
 
         protected:
@@ -98,6 +99,7 @@ namespace realsense2_camera
             void registerFPSParams();
             bool isSameProfileValues(const rs2::stream_profile& profile, const rs2_stream stype, const int fps);
             std::map<stream_index_pair, std::vector<int>> getAvailableFPSValues();
+            std::map<stream_index_pair, rs2::stream_profile> getFallbackProfiles() override;
 
         protected:
             std::map<stream_index_pair, std::shared_ptr<int> > _fps;
