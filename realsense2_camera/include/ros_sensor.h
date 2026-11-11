@@ -22,6 +22,11 @@
 #include <ros_utils.h>
 #include <sensor_params.h>
 #include <profile_manager.h>
+#include <sw_auto_exposure.h>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <diagnostic_updater/update_functions.hpp>
 
@@ -109,6 +114,11 @@ namespace realsense2_camera
             void UpdateSequenceIdCallback();
             template<class T> 
             void set_sensor_parameter_to_ros(rs2_option option);
+            void registerSwAutoExposureParameters(const std::string& module_name);
+            void startSwAutoExposure();
+            void swAutoExposureFrame(const rs2::frame& frame);
+            void swAutoExposureWorker();
+            void stopSwAutoExposure();
 
         private:
             rclcpp::Logger _logger;
@@ -125,5 +135,19 @@ namespace realsense2_camera
             double _color_freq_tolerance;
             std::map<stream_index_pair, FrequencyDiagnostics> _frequency_diagnostics;
             bool _force_image_default_qos;
+
+            // Software auto exposure of the colour sensor (<module>.sw_auto_exposure.*).
+            std::mutex _sw_ae_mutex;               // guards _sw_ae and _sw_ae_pending
+            SwAutoExposure _sw_ae;
+            std::atomic<bool> _sw_ae_enabled{false};
+            std::optional<int> _sw_ae_pending;     // exposure for the worker to apply, latest wins
+            bool _sw_ae_stop = false;
+            // No control transfers while the device starts its streams: a control transfer in the
+            // first second made the D415 fail its depth stream start ("Depth stream start failure").
+            static constexpr int kSwAeStartupFrames = 15;
+            int _sw_ae_holdoff_frames = 0;
+            int _sw_ae_applied = -1;               // exposure the sensor has, as far as we know
+            std::condition_variable _sw_ae_cv;
+            std::thread _sw_ae_thread;             // set_option is a USB control transfer: kept off the frame callback
     };
 }
