@@ -22,6 +22,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include "rclcpp_components/register_node_macro.hpp"
 #include <algorithm>
+#include <atomic>
 #include <csignal>
 #include <iostream>
 #include <limits>
@@ -63,7 +64,19 @@ namespace realsense2_camera
         double _reconnect_timeout;
         bool _initial_reset;
         std::thread _query_thread;
-        bool _is_alive;
+        // read by the query thread
+        std::atomic<bool> _is_alive{false};
+        // Shared with the devices-changed callback, which librealsense may still call on its own
+        // thread after this node is destroyed (rsutils::signal calls a copy outside its lock): the
+        // destructor clears `alive` under the mutex, so it waits for a running call and every later
+        // one returns without touching the node.
+        struct DeviceCallbackGuard
+        {
+            std::mutex mutex;
+            bool alive{true};
+        };
+        std::shared_ptr<DeviceCallbackGuard> _device_callback_guard{
+            std::make_shared<DeviceCallbackGuard>()};
         rclcpp::Logger _logger;
         std::shared_ptr<Parameters> _parameters;
     };
