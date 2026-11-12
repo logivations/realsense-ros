@@ -22,6 +22,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include "rclcpp_components/register_node_macro.hpp"
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <csignal>
 #include <iostream>
 #include <limits>
@@ -48,6 +50,13 @@ namespace realsense2_camera
         void closeDevice();
         void startDevice();
         void changeDeviceCallback(rs2::event_information& info);
+        // librealsense's thread: queue the event for handleDeviceChanges
+        void queueDeviceChange(const rs2::event_information& info);
+        // the node's executor (_device_changes_timer): runs the queued changeDeviceCallbacks, so
+        // BaseRealSenseNode is torn down and started on the thread that runs its own timers (the
+        // diagnostics updater published on a publisher being destroyed and the uncaught
+        // RCLInvalidArgument aborted the container)
+        void handleDeviceChanges();
         void getDevice(rs2::device_list list);
         void tryGetLogSeverity(rs2_log_severity& severity) const;
         static std::string parseUsbPort(std::string line);
@@ -63,7 +72,22 @@ namespace realsense2_camera
         double _reconnect_timeout;
         bool _initial_reset;
         std::thread _query_thread;
-        bool _is_alive;
+        // read by the query thread
+        std::atomic<bool> _is_alive{false};
+        // Shared with the devices-changed callback, which librealsense may still call on its own
+        // thread after this node is destroyed (rsutils::signal calls a copy outside its lock): the
+        // destructor clears `alive` under the mutex, so it waits for a running call and every later
+        // one returns without touching the node.
+        struct DeviceCallbackGuard
+        {
+            std::mutex mutex;
+            bool alive{true};
+        };
+        std::shared_ptr<DeviceCallbackGuard> _device_callback_guard{
+            std::make_shared<DeviceCallbackGuard>()};
+        std::mutex _device_changes_mutex;
+        std::vector<rs2::event_information> _device_changes;
+        rclcpp::TimerBase::SharedPtr _device_changes_timer;
         rclcpp::Logger _logger;
         std::shared_ptr<Parameters> _parameters;
     };
