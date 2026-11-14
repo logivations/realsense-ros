@@ -24,6 +24,7 @@
 #include <profile_manager.h>
 #include <sw_auto_exposure.h>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -143,10 +144,18 @@ namespace realsense2_camera
             std::optional<int> _sw_ae_pending;     // exposure for the worker to apply, latest wins
             bool _sw_ae_stop = false;
             // No control transfers while the device starts its streams: a control transfer in the
-            // first second made the D415 fail its depth stream start ("Depth stream start failure").
+            // first second made the D415 fail its depth stream start ("Depth stream start failure"),
+            // on the D455 the colour controls ~4 s after the stream start stopped depth for ~2 s with
+            // the same notification (amr47 2026-11-14), minutes after it nothing. The firmware auto
+            // exposure runs during the holdoff (warm-up, see startSwAutoExposure); it ends after
+            // kSwAeStartupFrames colour frames and kSwAeStartupTime since the first of them.
             static constexpr int kSwAeStartupFrames = 15;
+            static constexpr std::chrono::milliseconds kSwAeStartupTime{8000};
             int _sw_ae_holdoff_frames = 0;
+            std::optional<std::chrono::steady_clock::time_point> _sw_ae_holdoff_start;  // first colour frame of the holdoff
             int _sw_ae_applied = -1;               // exposure the sensor has, as far as we know
+            bool _sw_ae_handover = false;          // firmware AE warm-up running: hand over after the holdoff
+            std::optional<float> _sw_ae_restore_gain;  // gain to set again when the firmware AE is switched off
             std::condition_variable _sw_ae_cv;
             std::thread _sw_ae_thread;             // set_option is a USB control transfer: kept off the frame callback
     };
