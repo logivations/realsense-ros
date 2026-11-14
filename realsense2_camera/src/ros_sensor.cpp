@@ -190,7 +190,8 @@ void RosSensor::registerSwAutoExposureParameters(const std::string& module_name)
             }
         },
         describe("Software auto exposure of the colour sensor: holds target_luma with the exposure limited to [min_exposure, max_exposure] "
-                 "and the gain left as set. Turns the firmware auto exposure off."));
+                 "and the gain left as set. Lets the firmware auto exposure run for the first frames (the D455 colour ISP "
+                 "needs it to set up its gains), then turns it off."));
 
     for (const auto& name : {"enable", "target_luma", "min_exposure", "max_exposure", "frames_per_update", "deadband"})
         _parameters_names.push_back(prefix + name);
@@ -216,9 +217,35 @@ void RosSensor::startSwAutoExposure()
         {
             ROS_WARN_STREAM("Software auto exposure: reading the exposure failed (" << e.what() << "), starting at max_exposure");
         }
+
+        // Firmware auto exposure warm-up: the D455 colour ISP sets up internal gains (blue channel,
+        // brightness) only while its own auto exposure runs. A stream started with the firmware AE
+        // off sometimes keeps a broken state for the whole session: blue at half of green (green-
+        // yellow image the white balance cannot correct) and half the brightness at the same
+        // exposure and gain (amr47 2026-11-12..14). So the firmware AE runs during the startup
+        // holdoff and the software AE takes over after it. Set here, before the stream starts (or
+        // on a running stream when enabled at runtime): no control transfer during stream start.
+        _sw_ae_restore_gain.reset();
+        _sw_ae_handover = false;
+        try
+        {
+            if (supports(RS2_OPTION_ENABLE_AUTO_EXPOSURE))
+            {
+                if (supports(RS2_OPTION_GAIN))
+                    _sw_ae_restore_gain = get_option(RS2_OPTION_GAIN);
+                set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 1.f);
+                _sw_ae_handover = true;
+            }
+        }
+        catch (const std::exception& e)
+        {
+            ROS_WARN_STREAM("Software auto exposure: enabling the firmware auto exposure for the warm-up failed: " << e.what());
+        }
+
         start_exposure = _sw_ae.reset(current);
         _sw_ae_applied = current;  // a value outside the limits is corrected after the holdoff
         _sw_ae_holdoff_frames = kSwAeStartupFrames;
+        _sw_ae_holdoff_start.reset();
         _sw_ae_stop = false;
     }
     if (!_sw_ae_thread.joinable())
@@ -227,7 +254,8 @@ void RosSensor::startSwAutoExposure()
     _sw_ae_cv.notify_one();
 
     ROS_INFO_STREAM("Software auto exposure on: target luma " << config.target_luma << ", exposure " << config.min_exposure
-                    << ".." << config.max_exposure << ", starting at " << start_exposure);
+                    << ".." << config.max_exposure << ", starting at " << start_exposure << " after "
+                    << kSwAeStartupFrames << " frames / " << kSwAeStartupTime.count() / 1000.0 << " s of firmware auto exposure");
 }
 
 void RosSensor::swAutoExposureFrame(const rs2::frame& frame)
@@ -255,10 +283,19 @@ void RosSensor::swAutoExposureFrame(const rs2::frame& frame)
     std::lock_guard<std::mutex> lock(_sw_ae_mutex);
     if (_sw_ae_holdoff_frames > 0)
     {
-        if (--_sw_ae_holdoff_frames == 0 && _sw_ae.exposure() != _sw_ae_applied)
+        const auto now = std::chrono::steady_clock::now();
+        if (!_sw_ae_holdoff_start)
+            _sw_ae_holdoff_start = now;
+        if (_sw_ae_holdoff_frames > 1)
+            --_sw_ae_holdoff_frames;
+        else if (now - *_sw_ae_holdoff_start >= kSwAeStartupTime)
         {
-            _sw_ae_pending = _sw_ae.exposure();
-            _sw_ae_cv.notify_one();
+            _sw_ae_holdoff_frames = 0;
+            if (_sw_ae_handover || _sw_ae.exposure() != _sw_ae_applied)
+            {
+                _sw_ae_pending = _sw_ae.exposure();
+                _sw_ae_cv.notify_one();
+            }
         }
         return;
     }
@@ -280,6 +317,9 @@ void RosSensor::swAutoExposureWorker()
             return;
         const int exposure = *_sw_ae_pending;
         _sw_ae_pending.reset();
+        const bool handover = _sw_ae_handover;
+        const std::optional<float> restore_gain = handover ? _sw_ae_restore_gain : std::nullopt;
+        _sw_ae_handover = false;
         lock.unlock();
         bool applied = false;
         try
@@ -288,8 +328,14 @@ void RosSensor::swAutoExposureWorker()
             // switches it off on UVC anyway); check it on every change, the user may have enabled it.
             if (supports(RS2_OPTION_ENABLE_AUTO_EXPOSURE) && get_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE) != 0.f)
                 set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0.f);
+            // End of the firmware AE warm-up: the gain is the user's again, not what the AE left.
+            if (restore_gain)
+                set_option(RS2_OPTION_GAIN, *restore_gain);
             set_option(RS2_OPTION_EXPOSURE, static_cast<float>(exposure));
             applied = true;
+            if (handover)
+                ROS_INFO_STREAM("Software auto exposure: firmware auto exposure warm-up done, exposure " << exposure
+                                << (restore_gain ? ", gain " + std::to_string(static_cast<int>(*restore_gain)) : std::string()));
         }
         catch (const std::exception& e)
         {
