@@ -27,21 +27,39 @@ namespace realsense2_camera
     // The firmware auto exposure of the D4xx colour sensor has no exposure limit (only the depth
     // module has auto_exposure_limit): it exposes up to the frame period, 33 ms at 30 fps and
     // 200 ms at 5 fps, which smears every image taken while driving. This controller holds the mean
-    // luma of the image at a target with the exposure clamped to [min_exposure, max_exposure];
-    // the gain stays at the value the user set (<module>.gain).
+    // luma of the image at a target with the exposure clamped to [min_exposure, max_exposure].
+    // The gain stays at the value the user set (<module>.gain) unless max_gain is above it: then a
+    // scene too dark at max_exposure raises the gain up to max_gain (the firmware AE did the same
+    // once it reached the frame period), and a brighter scene brings the gain back to the user's
+    // value before it shortens the exposure.
     struct SwAutoExposureConfig
     {
         int target_luma = 120;       // mean luma 0..255 to hold (D455 firmware AE settles near 120)
         int min_exposure = 1;        // sensor units, 100 us on the D4xx colour sensor
         int max_exposure = 100;
+        int max_gain = 0;            // gain ramp above the user's gain once at max_exposure; 0 = off
         int frames_per_update = 2;   // luma is averaged over this many frames per correction
         double deadband = 0.1;       // relative luma error that is left alone
 
         bool valid() const
         {
             return target_luma > 0 && target_luma < 255 && min_exposure >= 1 &&
-                   max_exposure >= min_exposure && frames_per_update >= 1 && deadband >= 0.0;
+                   max_exposure >= min_exposure && max_gain >= 0 && frames_per_update >= 1 && deadband >= 0.0;
         }
+    };
+
+    // Exposure and gain the controller wants the sensor to have. gain is -1 while the controller
+    // does not manage the gain (no gain ramp: the user's gain stays).
+    struct SwAutoExposureSetting
+    {
+        int exposure = 0;
+        int gain = -1;
+
+        bool operator==(const SwAutoExposureSetting& other) const
+        {
+            return exposure == other.exposure && gain == other.gain;
+        }
+        bool operator!=(const SwAutoExposureSetting& other) const { return !(*this == other); }
     };
 
     class SwAutoExposure
@@ -51,7 +69,9 @@ namespace realsense2_camera
         static constexpr int kSettleFrames = 2;
         // Correction per step = (target / luma) ^ kStepExponent. Luma grows about with
         // exposure ^ 0.57 (gamma, measured on a D455 colour sensor), so 1.0 under-corrects a bit
-        // and the loop converges from one side without overshoot.
+        // and the loop converges from one side without overshoot. The gain acts on the luma about
+        // linearly (D415 fork camera: gain 128 gives ~2x the luma of gain 64, amr47 2026-11-11), so
+        // the same factor on the gain corrects about exactly.
         static constexpr double kStepExponent = 1.0;
         static constexpr double kMaxStepFactor = 4.0;
         // A saturated image (sunlight) hides how far off it is: step down by the maximum.
@@ -61,23 +81,35 @@ namespace realsense2_camera
         {
             _config = config;
             _exposure = clampExposure(_exposure);
+            if (_base_gain >= 0)
+                _gain = clampGain(_gain);
             restartAveraging();
         }
 
         const SwAutoExposureConfig& config() const { return _config; }
         int exposure() const { return _exposure; }
+        // The gain to apply, -1 while the gain is not managed (no base gain known).
+        int gain() const { return _base_gain >= 0 ? _gain : -1; }
+        SwAutoExposureSetting setting() const { return {exposure(), gain()}; }
+        // The user's gain the ramp starts from and returns to, -1 when unknown.
+        int baseGain() const { return _base_gain; }
+        // Whether the gain may rise above the user's gain.
+        bool gainRamp() const { return _base_gain >= 0 && _config.max_gain > _base_gain; }
 
-        // Starts from the exposure the sensor has now; returns the clamped value to apply.
-        int reset(int current_exposure)
+        // Starts from the exposure the sensor has now and the user's gain (`base_gain`, -1 when
+        // unknown: the gain is then never touched); returns the clamped exposure to apply.
+        int reset(int current_exposure, int base_gain = -1)
         {
             _exposure = clampExposure(current_exposure);
+            _base_gain = base_gain;
+            _gain = base_gain;
             restartAveraging();
             _settle = kSettleFrames;
             return _exposure;
         }
 
-        // Feeds the mean luma of one frame; returns the exposure to apply when it changes.
-        std::optional<int> addFrame(double mean_luma)
+        // Feeds the mean luma of one frame; returns exposure and gain to apply when they change.
+        std::optional<SwAutoExposureSetting> addFrame(double mean_luma)
         {
             if (_settle > 0)
             {
@@ -96,20 +128,60 @@ namespace realsense2_camera
             const double factor = luma >= kSaturatedLuma
                 ? 1.0 / kMaxStepFactor
                 : std::clamp(std::pow(ratio, kStepExponent), 1.0 / kMaxStepFactor, kMaxStepFactor);
-            int next = clampExposure(static_cast<int>(std::lround(_exposure * factor)));
-            if (next == _exposure)  // small exposures: a factor near 1 rounds back to the same unit
-                next = clampExposure(_exposure + (ratio > 1.0 ? 1 : -1));
-            if (next == _exposure)  // at the limit
+
+            int next_exposure = _exposure;
+            int next_gain = _gain;
+            if (gainRamp() && factor > 1.0 && _exposure * factor > _config.max_exposure)
+            {
+                // too dark: the exposure up to its limit, the rest of the correction on the gain
+                next_exposure = _config.max_exposure;
+                const double rest = factor * _exposure / _config.max_exposure;
+                next_gain = clampGain(static_cast<int>(std::lround(_gain * rest)));
+            }
+            else if (gainRamp() && factor < 1.0 && _gain > _base_gain)
+            {
+                // too bright: the gain back down to the user's first, then the exposure
+                const double wanted_gain = _gain * factor;
+                if (wanted_gain >= _base_gain)
+                    next_gain = clampGain(static_cast<int>(std::lround(wanted_gain)));
+                else
+                {
+                    next_gain = _base_gain;
+                    next_exposure = clampExposure(
+                        static_cast<int>(std::lround(_exposure * wanted_gain / _base_gain)));
+                }
+            }
+            else
+                next_exposure = clampExposure(static_cast<int>(std::lround(_exposure * factor)));
+
+            if (next_exposure == _exposure && next_gain == _gain)
+            {
+                // small values: a factor near 1 rounds back to the same unit; one unit of the
+                // control that is moving (the gain while above the user's or at max_exposure)
+                const bool on_gain = gainRamp() &&
+                    (_gain > _base_gain || (ratio > 1.0 && _exposure >= _config.max_exposure));
+                if (on_gain)
+                    next_gain = clampGain(_gain + (ratio > 1.0 ? 1 : -1));
+                else
+                    next_exposure = clampExposure(_exposure + (ratio > 1.0 ? 1 : -1));
+            }
+            if (next_exposure == _exposure && next_gain == _gain)  // at the limit
                 return std::nullopt;
-            _exposure = next;
+            _exposure = next_exposure;
+            _gain = next_gain;
             _settle = kSettleFrames;
-            return _exposure;
+            return setting();
         }
 
     private:
         int clampExposure(int exposure) const
         {
             return std::clamp(exposure, _config.min_exposure, _config.max_exposure);
+        }
+        // [user's gain, max_gain]; just the user's gain without a gain ramp
+        int clampGain(int gain) const
+        {
+            return std::clamp(gain, _base_gain, std::max(_base_gain, _config.max_gain));
         }
         void restartAveraging()
         {
@@ -119,6 +191,8 @@ namespace realsense2_camera
 
         SwAutoExposureConfig _config;
         int _exposure = 1;
+        int _base_gain = -1;
+        int _gain = -1;
         int _settle = 0;
         double _luma_sum = 0.0;
         int _luma_count = 0;

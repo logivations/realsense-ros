@@ -139,14 +139,14 @@ void RosSensor::registerSwAutoExposureParameters(const std::string& module_name)
             if (!config.valid())
             {
                 ROS_WARN_STREAM("Software auto exposure: ignoring " << parameter.get_name() << "=" << parameter.value_to_string()
-                                << " (needs 0 < target_luma < 255, 1 <= min_exposure <= max_exposure, frames_per_update >= 1)");
+                                << " (needs 0 < target_luma < 255, 1 <= min_exposure <= max_exposure, max_gain >= 0, frames_per_update >= 1)");
                 return;
             }
-            const int before = _sw_ae.exposure();
+            const SwAutoExposureSetting before = _sw_ae.setting();
             _sw_ae.configure(config);
-            if (_sw_ae_enabled && _sw_ae.exposure() != before)
+            if (_sw_ae_enabled && _sw_ae.setting() != before)
             {
-                _sw_ae_pending = _sw_ae.exposure();
+                _sw_ae_pending = _sw_ae.setting();
                 _sw_ae_cv.notify_one();
             }
         };
@@ -162,6 +162,12 @@ void RosSensor::registerSwAutoExposureParameters(const std::string& module_name)
     config.max_exposure = _params.getParameters()->setParam<int>(prefix + "max_exposure", config.max_exposure,
         update([](SwAutoExposureConfig& c, const rclcpp::Parameter& p){ c.max_exposure = p.get_value<int>(); }),
         describe("Longest exposure the software auto exposure sets (sensor units, 100 us on D4xx colour): limits motion blur"));
+    config.max_gain = _params.getParameters()->setParam<int>(prefix + "max_gain", config.max_gain,
+        update([](SwAutoExposureConfig& c, const rclcpp::Parameter& p){ c.max_gain = p.get_value<int>(); }),
+        describe("Highest gain the software auto exposure raises the gain to once the exposure is at max_exposure and the "
+                 "image is still too dark; it brings the gain back to <module>.gain before it shortens the exposure. "
+                 "0 or not above <module>.gain: the gain stays at <module>.gain. <module>.gain is read when the software "
+                 "auto exposure starts"));
     config.frames_per_update = _params.getParameters()->setParam<int>(prefix + "frames_per_update", config.frames_per_update,
         update([](SwAutoExposureConfig& c, const rclcpp::Parameter& p){ c.frames_per_update = p.get_value<int>(); }),
         describe("Frames whose luma is averaged for one exposure correction"));
@@ -190,10 +196,10 @@ void RosSensor::registerSwAutoExposureParameters(const std::string& module_name)
             }
         },
         describe("Software auto exposure of the colour sensor: holds target_luma with the exposure limited to [min_exposure, max_exposure] "
-                 "and the gain left as set. Lets the firmware auto exposure run for the first frames (the D455 colour ISP "
+                 "and the gain left as set (up to max_gain once the exposure is at max_exposure). Lets the firmware auto exposure run for the first frames (the D455 colour ISP "
                  "needs it to set up its gains), then turns it off."));
 
-    for (const auto& name : {"enable", "target_luma", "min_exposure", "max_exposure", "frames_per_update", "deadband"})
+    for (const auto& name : {"enable", "target_luma", "min_exposure", "max_exposure", "max_gain", "frames_per_update", "deadband"})
         _parameters_names.push_back(prefix + name);
 
     // The callback above has already run when the value came from a parameter override.
@@ -225,14 +231,26 @@ void RosSensor::startSwAutoExposure()
         // exposure and gain (amr47 2026-11-12..14). So the firmware AE runs during the startup
         // holdoff and the software AE takes over after it. Set here, before the stream starts (or
         // on a running stream when enabled at runtime): no control transfer during stream start.
+        // The gain read here is the user's (<module>.gain), the base of the gain ramp. If it is
+        // still the gain a previous software AE session raised it to (enabled again at runtime),
+        // that session's base is the user's.
+        const int previous_base_gain = _sw_ae.baseGain();
+        const int previous_gain = _sw_ae_applied.gain;
         _sw_ae_restore_gain.reset();
         _sw_ae_handover = false;
         try
         {
+            if (supports(RS2_OPTION_GAIN))
+                _sw_ae_restore_gain = get_option(RS2_OPTION_GAIN);
+        }
+        catch (const std::exception& e)
+        {
+            ROS_WARN_STREAM("Software auto exposure: reading the gain failed (" << e.what() << "), the gain stays as it is");
+        }
+        try
+        {
             if (supports(RS2_OPTION_ENABLE_AUTO_EXPOSURE))
             {
-                if (supports(RS2_OPTION_GAIN))
-                    _sw_ae_restore_gain = get_option(RS2_OPTION_GAIN);
                 set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 1.f);
                 _sw_ae_handover = true;
             }
@@ -242,8 +260,14 @@ void RosSensor::startSwAutoExposure()
             ROS_WARN_STREAM("Software auto exposure: enabling the firmware auto exposure for the warm-up failed: " << e.what());
         }
 
-        start_exposure = _sw_ae.reset(current);
-        _sw_ae_applied = current;  // a value outside the limits is corrected after the holdoff
+        int base_gain = _sw_ae_restore_gain ? static_cast<int>(std::lround(*_sw_ae_restore_gain)) : -1;
+        if (base_gain >= 0 && previous_base_gain >= 0 && base_gain == previous_gain && previous_gain != previous_base_gain)
+        {
+            base_gain = previous_base_gain;
+            _sw_ae_restore_gain = static_cast<float>(base_gain);
+        }
+        start_exposure = _sw_ae.reset(current, base_gain);
+        _sw_ae_applied = {current, base_gain};  // a value outside the limits is corrected after the holdoff
         _sw_ae_holdoff_frames = kSwAeStartupFrames;
         _sw_ae_holdoff_start.reset();
         _sw_ae_stop = false;
@@ -253,8 +277,11 @@ void RosSensor::startSwAutoExposure()
     _sw_ae_enabled = true;
     _sw_ae_cv.notify_one();
 
+    const int start_gain = _sw_ae.gain();
     ROS_INFO_STREAM("Software auto exposure on: target luma " << config.target_luma << ", exposure " << config.min_exposure
-                    << ".." << config.max_exposure << ", starting at " << start_exposure << " after "
+                    << ".." << config.max_exposure
+                    << (_sw_ae.gainRamp() ? ", gain " + std::to_string(start_gain) + ".." + std::to_string(config.max_gain) : std::string())
+                    << ", starting at " << start_exposure << " after "
                     << kSwAeStartupFrames << " frames / " << kSwAeStartupTime.count() / 1000.0 << " s of firmware auto exposure");
 }
 
@@ -291,9 +318,9 @@ void RosSensor::swAutoExposureFrame(const rs2::frame& frame)
         else if (now - *_sw_ae_holdoff_start >= kSwAeStartupTime)
         {
             _sw_ae_holdoff_frames = 0;
-            if (_sw_ae_handover || _sw_ae.exposure() != _sw_ae_applied)
+            if (_sw_ae_handover || _sw_ae.setting() != _sw_ae_applied)
             {
-                _sw_ae_pending = _sw_ae.exposure();
+                _sw_ae_pending = _sw_ae.setting();
                 _sw_ae_cv.notify_one();
             }
         }
@@ -301,7 +328,7 @@ void RosSensor::swAutoExposureFrame(const rs2::frame& frame)
     }
     if (const auto next = _sw_ae.addFrame(luma))
     {
-        ROS_DEBUG_STREAM("Software auto exposure: luma " << luma << " -> exposure " << *next);
+        ROS_DEBUG_STREAM("Software auto exposure: luma " << luma << " -> exposure " << next->exposure << ", gain " << next->gain);
         _sw_ae_pending = next;
         _sw_ae_cv.notify_one();
     }
@@ -315,10 +342,17 @@ void RosSensor::swAutoExposureWorker()
         _sw_ae_cv.wait(lock, [this](){ return _sw_ae_stop || _sw_ae_pending.has_value(); });
         if (_sw_ae_stop)
             return;
-        const int exposure = *_sw_ae_pending;
+        const SwAutoExposureSetting setting = *_sw_ae_pending;
+        const int exposure = setting.exposure;
         _sw_ae_pending.reset();
         const bool handover = _sw_ae_handover;
-        const std::optional<float> restore_gain = handover ? _sw_ae_restore_gain : std::nullopt;
+        // The gain: the controller's when it manages it (on a change and at the handover), else the
+        // user's again after the firmware AE warm-up.
+        std::optional<float> gain;
+        if (setting.gain >= 0 && (handover || setting.gain != _sw_ae_applied.gain))
+            gain = static_cast<float>(setting.gain);
+        else if (handover)
+            gain = _sw_ae_restore_gain;
         _sw_ae_handover = false;
         lock.unlock();
         bool applied = false;
@@ -329,21 +363,22 @@ void RosSensor::swAutoExposureWorker()
             if (supports(RS2_OPTION_ENABLE_AUTO_EXPOSURE) && get_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE) != 0.f)
                 set_option(RS2_OPTION_ENABLE_AUTO_EXPOSURE, 0.f);
             // End of the firmware AE warm-up: the gain is the user's again, not what the AE left.
-            if (restore_gain)
-                set_option(RS2_OPTION_GAIN, *restore_gain);
+            if (gain)
+                set_option(RS2_OPTION_GAIN, *gain);
             set_option(RS2_OPTION_EXPOSURE, static_cast<float>(exposure));
             applied = true;
             if (handover)
                 ROS_INFO_STREAM("Software auto exposure: firmware auto exposure warm-up done, exposure " << exposure
-                                << (restore_gain ? ", gain " + std::to_string(static_cast<int>(*restore_gain)) : std::string()));
+                                << (gain ? ", gain " + std::to_string(static_cast<int>(*gain)) : std::string()));
         }
         catch (const std::exception& e)
         {
-            ROS_WARN_STREAM("Software auto exposure: setting exposure " << exposure << " failed: " << e.what());
+            ROS_WARN_STREAM("Software auto exposure: setting exposure " << exposure
+                            << (gain ? " / gain " + std::to_string(static_cast<int>(*gain)) : std::string()) << " failed: " << e.what());
         }
         lock.lock();
         if (applied)
-            _sw_ae_applied = exposure;
+            _sw_ae_applied = setting;
     }
 }
 
