@@ -47,11 +47,20 @@ RealSenseNodeFactory::RealSenseNodeFactory(const std::string & node_name, const 
 
 RealSenseNodeFactory::~RealSenseNodeFactory()
 {
+    {
+        // A camera that comes back on USB runs the devices-changed callback on librealsense's
+        // thread. After this node was unloaded from its component container (a health checker
+        // reloading the driver), that callback ran startDevice on the destroyed node and the
+        // container died. Waits for a running call; later ones return.
+        std::lock_guard<std::mutex> lock(_device_callback_guard->mutex);
+        _device_callback_guard->alive = false;
+    }
     _is_alive = false;
     if (_query_thread.joinable())
     {
         _query_thread.join();
     }
+    _ctx.set_devices_changed_callback([](rs2::event_information &) {});
 }
 
 std::string RealSenseNodeFactory::parseUsbPort(std::string line)
@@ -209,6 +218,25 @@ void RealSenseNodeFactory::getDevice(rs2::device_list list)
     }
 }
 
+void RealSenseNodeFactory::queueDeviceChange(const rs2::event_information& info)
+{
+    std::lock_guard<std::mutex> lock(_device_changes_mutex);
+    _device_changes.push_back(info);
+}
+
+void RealSenseNodeFactory::handleDeviceChanges()
+{
+    std::vector<rs2::event_information> changes;
+    {
+        std::lock_guard<std::mutex> lock(_device_changes_mutex);
+        changes.swap(_device_changes);
+    }
+    for (auto & info : changes)
+    {
+        changeDeviceCallback(info);
+    }
+}
+
 void RealSenseNodeFactory::changeDeviceCallback(rs2::event_information& info)
 {
     if (info.was_removed(_device))
@@ -248,6 +276,8 @@ void RealSenseNodeFactory::init()
     {
         _is_alive = true;
         _parameters = std::make_shared<Parameters>(*this);
+        _device_changes_timer = create_wall_timer(
+            std::chrono::milliseconds(100), [this]() {handleDeviceChanges();});
 
         rs2_error* e = nullptr;
         std::string running_librealsense_version(api_version_to_string(rs2_get_api_version(&e)));
@@ -312,7 +342,15 @@ void RealSenseNodeFactory::init()
                         getDevice(_ctx.query_devices());
                         if (_device)
                         {
-                            std::function<void(rs2::event_information&)> change_device_callback_function = [this](rs2::event_information& info){changeDeviceCallback(info);};
+                            std::function<void(rs2::event_information&)> change_device_callback_function =
+                                [this, guard = _device_callback_guard](rs2::event_information& info)
+                                {
+                                    std::lock_guard<std::mutex> lock(guard->mutex);
+                                    if (guard->alive)  // else the node is destroyed or going
+                                    {
+                                        queueDeviceChange(info);
+                                    }
+                                };
                             _ctx.set_devices_changed_callback(change_device_callback_function);
                             startDevice();
                         }

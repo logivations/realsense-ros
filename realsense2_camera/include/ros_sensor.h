@@ -22,6 +22,12 @@
 #include <ros_utils.h>
 #include <sensor_params.h>
 #include <profile_manager.h>
+#include <sw_auto_exposure.h>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <diagnostic_updater/update_functions.hpp>
 
@@ -109,6 +115,11 @@ namespace realsense2_camera
             void UpdateSequenceIdCallback();
             template<class T> 
             void set_sensor_parameter_to_ros(rs2_option option);
+            void registerSwAutoExposureParameters(const std::string& module_name);
+            void startSwAutoExposure();
+            void swAutoExposureFrame(const rs2::frame& frame);
+            void swAutoExposureWorker();
+            void stopSwAutoExposure();
 
         private:
             rclcpp::Logger _logger;
@@ -125,5 +136,27 @@ namespace realsense2_camera
             double _color_freq_tolerance;
             std::map<stream_index_pair, FrequencyDiagnostics> _frequency_diagnostics;
             bool _force_image_default_qos;
+
+            // Software auto exposure of the colour sensor (<module>.sw_auto_exposure.*).
+            std::mutex _sw_ae_mutex;               // guards _sw_ae and _sw_ae_pending
+            SwAutoExposure _sw_ae;
+            std::atomic<bool> _sw_ae_enabled{false};
+            std::optional<SwAutoExposureSetting> _sw_ae_pending;  // exposure (+ gain) for the worker to apply, latest wins
+            bool _sw_ae_stop = false;
+            // No control transfers while the device starts its streams: a control transfer in the
+            // first second made the D415 fail its depth stream start ("Depth stream start failure"),
+            // on the D455 the colour controls ~4 s after the stream start stopped depth for ~2 s with
+            // the same notification (amr47 2026-11-14), minutes after it nothing. The firmware auto
+            // exposure runs during the holdoff (warm-up, see startSwAutoExposure); it ends after
+            // kSwAeStartupFrames colour frames and kSwAeStartupTime since the first of them.
+            static constexpr int kSwAeStartupFrames = 15;
+            static constexpr std::chrono::milliseconds kSwAeStartupTime{8000};
+            int _sw_ae_holdoff_frames = 0;
+            std::optional<std::chrono::steady_clock::time_point> _sw_ae_holdoff_start;  // first colour frame of the holdoff
+            SwAutoExposureSetting _sw_ae_applied{-1, -1};  // exposure (+ gain) the sensor has, as far as we know
+            bool _sw_ae_handover = false;          // firmware AE warm-up running: hand over after the holdoff
+            std::optional<float> _sw_ae_restore_gain;  // gain to set again when the firmware AE is switched off
+            std::condition_variable _sw_ae_cv;
+            std::thread _sw_ae_thread;             // set_option is a USB control transfer: kept off the frame callback
     };
 }
