@@ -21,7 +21,11 @@
 #include <vector>
 
 #include "sw_auto_exposure.h"
+#include "yuyv_to_rgb8.h"
 
+using realsense2_camera::ColourCastWatch;
+using realsense2_camera::MeanColour;
+using realsense2_camera::PixelLayout;
 using realsense2_camera::SwAutoExposure;
 using realsense2_camera::SwAutoExposureConfig;
 using realsense2_camera::SwAutoExposureSetting;
@@ -222,6 +226,121 @@ TEST(SwAutoExposure, LowerMaxGainClampsGain)
     EXPECT_EQ(ae.gain(), 96);
     ae.configure(config(333, 0));
     EXPECT_EQ(ae.gain(), 64);
+}
+
+namespace
+{
+// Image means of the front camera on wfal-amr3: the broken colour ISP session of 2026-11-24 and
+// warm light at a charging station on wfal-amr4 (2026-11-23 15:18), which is healthy.
+const MeanColour kBrokenColour{113.0, 124.0, 93.0};
+const MeanColour kWarmLight{82.7, 74.9, 56.6};
+const MeanColour kHealthyColour{120.0, 121.0, 122.0};
+
+using Events = std::vector<std::pair<double, ColourCastWatch::Event>>;
+
+// Feeds `seconds` of frames at 5 fps and, like the driver at the end of the holdoff, ends a
+// warm-up right after each Rewarm (the holdoff frames are not fed to the watch). Returns the events
+// with the second they came at.
+Events feed(ColourCastWatch& watch, ColourCastWatch::Clock::time_point& now, double seconds, const MeanColour& colour)
+{
+    Events events;
+    const auto start = now;
+    for (int i = 0; i < static_cast<int>(seconds * 5); ++i)
+    {
+        now += std::chrono::milliseconds(200);
+        const auto event = watch.addFrame(now, colour);
+        if (event == ColourCastWatch::Event::Rewarm)
+            watch.warmupDone(now);
+        if (event != ColourCastWatch::Event::None)
+            events.push_back({std::chrono::duration<double>(now - start).count(), event});
+    }
+    return events;
+}
+}  // namespace
+
+// The front camera streams YUYV and publishes RGB8 converted with yuyvToRgb8: the colour the watch
+// sees from the YUYV frame has to be the one in the published images, where the thresholds come from.
+TEST(ColourCastWatch, YuyvMeanColourMatchesPublishedRgb)
+{
+    // pairs of pixels alternating green-yellow (U 110, V 140) and grey (U = V = 128), Y per pixel
+    cv::Mat yuyv(8, 16, CV_8UC2);
+    for (int y = 0; y < yuyv.rows; ++y)
+        for (int x = 0; x < yuyv.cols; ++x)
+        {
+            const bool cast = (x / 2) % 2 == 0;
+            const uint8_t chroma = x % 2 == 0 ? (cast ? 110 : 128) : (cast ? 140 : 128);  // U on even, V on odd pixels
+            yuyv.at<cv::Vec2b>(y, x) = {static_cast<uint8_t>(110 + x), chroma};
+        }
+    cv::Mat rgb;
+    realsense2_camera::yuyvToRgb8(yuyv, rgb);
+    const MeanColour from_yuyv = realsense2_camera::imageMeans(yuyv.data, yuyv.cols, yuyv.rows, static_cast<int>(yuyv.step),
+                                                               realsense2_camera::kYuyvLayout, 1).colour;
+    const MeanColour from_rgb = realsense2_camera::imageMeans(rgb.data, rgb.cols, rgb.rows, static_cast<int>(rgb.step),
+                                                              PixelLayout{3, 0, 1, 2}, 1).colour;
+    EXPECT_NEAR(from_yuyv.r, from_rgb.r, 1.0);
+    EXPECT_NEAR(from_yuyv.g, from_rgb.g, 1.0);
+    EXPECT_NEAR(from_yuyv.b, from_rgb.b, 1.0);
+    EXPECT_LT(from_yuyv.b / from_yuyv.g, 0.9);
+}
+
+// wfal-amr3 2026-11-24: the front camera kept the broken colour for 25 h after a start whose
+// warm-up looked fine; the lift gate markers then decoded one at a time and the transit failed.
+// The watch asks for another warm-up once the colour stayed broken for kHold after the settle time.
+TEST(ColourCastWatch, BrokenColourAsksForAnotherWarmup)
+{
+    ColourCastWatch watch;
+    ColourCastWatch::Clock::time_point now{};
+    EXPECT_TRUE(feed(watch, now, 60.0, kBrokenColour).empty());  // no warm-up ended yet
+    watch.warmupDone(now);
+    const auto events = feed(watch, now, 120.0, kBrokenColour);
+    ASSERT_FALSE(events.empty());
+    EXPECT_EQ(events.front().second, ColourCastWatch::Event::Rewarm);
+    const double settle_and_hold = std::chrono::duration<double>(ColourCastWatch::kSettle + ColourCastWatch::kHold).count();
+    EXPECT_GE(events.front().first, settle_and_hold);
+    EXPECT_LE(events.front().first, settle_and_hold + 2 * std::chrono::duration<double>(ColourCastWatch::kBlock).count());
+}
+
+// Warm light lowers B/G like the broken state but raises R/G; a healthy camera there must not
+// lose 8 s of exposure control to a warm-up.
+TEST(ColourCastWatch, WarmLightIsNotBrokenColour)
+{
+    ColourCastWatch watch;
+    ColourCastWatch::Clock::time_point now{};
+    watch.warmupDone(now);
+    EXPECT_TRUE(feed(watch, now, 600.0, kWarmLight).empty());
+}
+
+// A camera the warm-up does not repair must not run the firmware AE (exposure without limit,
+// motion blur) over and over: at most kMaxRewarms warm-ups a minute apart, then one give-up.
+TEST(ColourCastWatch, GivesUpAfterMaxRewarms)
+{
+    ColourCastWatch watch;
+    ColourCastWatch::Clock::time_point now{};
+    watch.warmupDone(now);
+    const auto events = feed(watch, now, 600.0, kBrokenColour);
+    ASSERT_EQ(events.size(), static_cast<std::size_t>(ColourCastWatch::kMaxRewarms + 1));
+    for (int i = 0; i < ColourCastWatch::kMaxRewarms; ++i)
+        EXPECT_EQ(events[i].second, ColourCastWatch::Event::Rewarm);
+    EXPECT_EQ(events.back().second, ColourCastWatch::Event::GiveUp);
+    for (std::size_t i = 1; i < events.size(); ++i)
+        EXPECT_GE(events[i].first - events[i - 1].first, 59.0);
+}
+
+// The warm-up repaired the colour (amr47: one firmware AE run clears it): reported once, only on
+// healthy images (warm light tells nothing), and no further warm-ups while the colour stays normal.
+TEST(ColourCastWatch, StopsOnceColourIsBack)
+{
+    ColourCastWatch watch;
+    ColourCastWatch::Clock::time_point now{};
+    watch.warmupDone(now);
+    const auto broken = feed(watch, now, 90.0, kBrokenColour);
+    ASSERT_EQ(broken.size(), 1u);
+    ASSERT_EQ(broken.front().second, ColourCastWatch::Event::Rewarm);
+    EXPECT_TRUE(feed(watch, now, 60.0, kWarmLight).empty());
+    const auto healthy = feed(watch, now, 600.0, kHealthyColour);
+    ASSERT_EQ(healthy.size(), 1u);
+    EXPECT_EQ(healthy.front().second, ColourCastWatch::Event::Cleared);
+    EXPECT_EQ(watch.rewarms(), 1);
 }
 
 int main(int argc, char** argv)

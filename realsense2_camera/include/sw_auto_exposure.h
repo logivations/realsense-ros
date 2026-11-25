@@ -15,6 +15,7 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -199,31 +200,166 @@ namespace realsense2_camera
     };
 
     // Byte layout of an 8-bit interleaved colour image: bytes per pixel and the offsets of R, G, B
-    // (all three equal to the Y offset for YUV formats).
+    // (all three equal to the Y offset for YUV formats). For the 4:2:2 YUV formats u and v are the
+    // offsets of U and V in the 4-byte pair of pixels; -1 for RGB formats.
     struct PixelLayout
     {
         int bytes_per_pixel;
         int r, g, b;
+        int u = -1, v = -1;
+    };
+    constexpr PixelLayout kYuyvLayout{2, 0, 0, 0, 1, 3};
+    constexpr PixelLayout kUyvyLayout{2, 1, 1, 1, 0, 2};
+
+    struct MeanColour
+    {
+        double r = 0.0, g = 0.0, b = 0.0;
     };
 
-    // Mean luma (BT.601) of an image, sampled every `step` pixels in both directions.
-    inline double meanLuma(const uint8_t* data, int width, int height, int stride_bytes,
-                           const PixelLayout& layout, int step = 8)
+    struct ImageMeans
+    {
+        double luma = 0.0;  // BT.601 luma; the Y mean for YUV formats
+        MeanColour colour;  // YUV formats: converted like the published frames (BT.601 limited range, yuyvToRgb8)
+    };
+
+    // Mean luma and colour of an image, sampled every `step` pixels in both directions.
+    inline ImageMeans imageMeans(const uint8_t* data, int width, int height, int stride_bytes,
+                                 const PixelLayout& layout, int step = 8)
     {
         if (!data || width <= 0 || height <= 0 || step <= 0)
-            return 0.0;
-        double sum = 0.0;
+            return {};
+        const bool yuv = layout.u >= 0 && layout.v >= 0;
+        // c1, c2: G and B in the pixel, or U and V in its pair of pixels
+        const int c1 = yuv ? layout.u : layout.g, c2 = yuv ? layout.v : layout.b, pair_mask = yuv ? ~1 : ~0;
+        double s0 = 0.0, s1 = 0.0, s2 = 0.0;
         std::size_t count = 0;
         for (int y = step / 2; y < height; y += step)
         {
             const uint8_t* row = data + static_cast<std::size_t>(y) * stride_bytes;
             for (int x = step / 2; x < width; x += step)
             {
-                const uint8_t* px = row + static_cast<std::size_t>(x) * layout.bytes_per_pixel;
-                sum += 0.299 * px[layout.r] + 0.587 * px[layout.g] + 0.114 * px[layout.b];
+                s0 += row[static_cast<std::size_t>(x) * layout.bytes_per_pixel + layout.r];
+                const uint8_t* group = row + static_cast<std::size_t>(x & pair_mask) * layout.bytes_per_pixel;
+                s1 += group[c1];
+                s2 += group[c2];
                 ++count;
             }
         }
-        return count ? sum / count : 0.0;
+        if (!count)
+            return {};
+        s0 /= count;
+        s1 /= count;
+        s2 /= count;
+        if (!yuv)
+            return {0.299 * s0 + 0.587 * s1 + 0.114 * s2, {s0, s1, s2}};
+        const double y = 1.164 * (s0 - 16.0), u = s1 - 128.0, v = s2 - 128.0;
+        return {s0, {y + 1.596 * v, y - 0.392 * u - 0.813 * v, y + 2.017 * u}};
     }
+
+    // Watches the images for the broken colour ISP state the D455 sometimes keeps for a whole
+    // session despite the firmware AE warm-up at the start: blue at half to four fifths of green,
+    // a green-yellow image. One more firmware AE warm-up clears it on a running stream.
+    //
+    // Each block of frames is healthy (B/G at least kMaxBlueGreen), broken (B/G below it and R/G
+    // below kMaxRedGreen) or tells nothing (warm light lowers B/G too but raises R/G; too dark or
+    // saturated). Broken blocks for kHold, after kSettle since the last warm-up, ask for another
+    // warm-up, at most kMaxRewarms times per session. Thresholds from 3125 front images of four
+    // Westfalia AMRs (2026-08..11): broken session B/G 0.57-0.89 at R/G 0.62-0.97, healthy B/G
+    // >= 0.97 (1st percentile), warm light B/G 0.76 at R/G 1.10.
+    class ColourCastWatch
+    {
+    public:
+        using Clock = std::chrono::steady_clock;
+        static constexpr double kMaxBlueGreen = 0.90;
+        static constexpr double kMaxRedGreen = 1.05;
+        static constexpr double kMinGreen = 40.0;   // darker: noise
+        static constexpr double kMaxGreen = 230.0;  // brighter: saturated
+        static constexpr std::chrono::seconds kBlock{5};
+        static constexpr std::chrono::seconds kHold{30};
+        // the ISP and the software AE settle after a warm-up; with kHold a minute between warm-ups
+        static constexpr std::chrono::seconds kSettle{30};
+        static constexpr int kMaxRewarms = 3;
+
+        enum class Event
+        {
+            None,
+            Rewarm,   // run the firmware AE warm-up again
+            Cleared,  // healthy again after a warm-up asked for here
+            GiveUp,   // still broken after kMaxRewarms warm-ups (reported once)
+        };
+
+        // A warm-up ended, or the watch (re)starts: the colour counts again after kSettle.
+        void warmupDone(Clock::time_point now)
+        {
+            _settle_until = now + kSettle;
+            _sum = {};
+            _count = 0;
+            _cast_since.reset();
+        }
+
+        Event addFrame(Clock::time_point now, const MeanColour& colour)
+        {
+            if (now < _settle_until)
+                return Event::None;
+            if (_count == 0)
+                _block_start = now;
+            _sum.r += colour.r;
+            _sum.g += colour.g;
+            _sum.b += colour.b;
+            ++_count;
+            if (now - _block_start < kBlock)
+                return Event::None;
+
+            const double g = _sum.g / _count;
+            const MeanColour sum = _sum;
+            _sum = {};
+            _count = 0;
+            if (g < kMinGreen || g > kMaxGreen)
+                return Event::None;
+            _blue_green = sum.b / sum.g;
+            _red_green = sum.r / sum.g;
+            if (_blue_green >= kMaxBlueGreen)  // healthy
+            {
+                _cast_since.reset();
+                if (!_awaiting_clear)
+                    return Event::None;
+                _awaiting_clear = false;
+                return Event::Cleared;
+            }
+            if (_red_green >= kMaxRedGreen)  // warm light: neither breaks nor extends the run
+                return Event::None;
+            if (!_cast_since)
+                _cast_since = _block_start;
+            if (now - *_cast_since < kHold)
+                return Event::None;
+            _cast_since.reset();
+            if (_rewarms < kMaxRewarms)
+            {
+                ++_rewarms;
+                _awaiting_clear = true;
+                return Event::Rewarm;
+            }
+            if (_gave_up)
+                return Event::None;
+            _gave_up = true;
+            return Event::GiveUp;
+        }
+
+        int rewarms() const { return _rewarms; }
+        // B/G and R/G of the last block that was neither too dark nor saturated
+        double blueGreen() const { return _blue_green; }
+        double redGreen() const { return _red_green; }
+
+    private:
+        int _rewarms = 0;
+        bool _gave_up = false;
+        bool _awaiting_clear = false;
+        Clock::time_point _settle_until = Clock::time_point::max();  // nothing counts before the first warm-up ended
+        Clock::time_point _block_start;
+        std::optional<Clock::time_point> _cast_since;
+        MeanColour _sum;
+        int _count = 0;
+        double _blue_green = 0.0;
+        double _red_green = 0.0;
+    };
 }  // namespace realsense2_camera

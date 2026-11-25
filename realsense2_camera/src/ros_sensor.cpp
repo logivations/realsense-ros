@@ -174,6 +174,18 @@ void RosSensor::registerSwAutoExposureParameters(const std::string& module_name)
     config.deadband = _params.getParameters()->setParam<double>(prefix + "deadband", config.deadband,
         update([](SwAutoExposureConfig& c, const rclcpp::Parameter& p){ c.deadband = p.get_value<double>(); }),
         describe("Relative luma error the software auto exposure leaves alone"));
+    _sw_ae_rewarm_on_colour_cast = _params.getParameters()->setParam<bool>(prefix + "rewarm_on_colour_cast", false,
+        [this](const rclcpp::Parameter& parameter)
+        {
+            std::lock_guard<std::mutex> lock(_sw_ae_mutex);
+            if (parameter.get_value<bool>() && !_sw_ae_rewarm_on_colour_cast)
+                _sw_ae_colour_watch.warmupDone(std::chrono::steady_clock::now());  // no run left from before it was off
+            _sw_ae_rewarm_on_colour_cast = parameter.get_value<bool>();
+        },
+        describe("Run the firmware auto exposure warm-up again, up to " + std::to_string(ColourCastWatch::kMaxRewarms) +
+                 " times, when the images keep the green-yellow colour (blue below green, no warm light) for " +
+                 std::to_string(ColourCastWatch::kHold.count()) + " s: the broken colour ISP state the D455 sometimes "
+                 "keeps despite the warm-up at the start"));
     if (!config.valid())
     {
         ROS_WARN_STREAM("Software auto exposure: invalid " << prefix << "* parameters, using the defaults");
@@ -199,7 +211,8 @@ void RosSensor::registerSwAutoExposureParameters(const std::string& module_name)
                  "and the gain left as set (up to max_gain once the exposure is at max_exposure). Lets the firmware auto exposure run for the first frames (the D455 colour ISP "
                  "needs it to set up its gains), then turns it off."));
 
-    for (const auto& name : {"enable", "target_luma", "min_exposure", "max_exposure", "max_gain", "frames_per_update", "deadband"})
+    for (const auto& name : {"enable", "target_luma", "min_exposure", "max_exposure", "max_gain", "frames_per_update", "deadband",
+                             "rewarm_on_colour_cast"})
         _parameters_names.push_back(prefix + name);
 
     // The callback above has already run when the value came from a parameter override.
@@ -209,11 +222,31 @@ void RosSensor::registerSwAutoExposureParameters(const std::string& module_name)
 
 void RosSensor::startSwAutoExposure()
 {
-    int start_exposure = 0;
+    const int start_exposure = beginWarmup();
     SwAutoExposureConfig config;
     {
         std::lock_guard<std::mutex> lock(_sw_ae_mutex);
         config = _sw_ae.config();
+        _sw_ae_stop = false;
+        _sw_ae_colour_watch = ColourCastWatch{};
+    }
+    if (!_sw_ae_thread.joinable())
+        _sw_ae_thread = std::thread([this](){ swAutoExposureWorker(); });
+    _sw_ae_enabled = true;
+    _sw_ae_cv.notify_one();
+
+    const int start_gain = _sw_ae.gain();
+    ROS_INFO_STREAM("Software auto exposure on: target luma " << config.target_luma << ", exposure " << config.min_exposure
+                    << ".." << config.max_exposure
+                    << (_sw_ae.gainRamp() ? ", gain " + std::to_string(start_gain) + ".." + std::to_string(config.max_gain) : std::string())
+                    << ", starting at " << start_exposure << " after "
+                    << kSwAeStartupFrames << " frames / " << kSwAeStartupTime.count() / 1000.0 << " s of firmware auto exposure");
+}
+
+int RosSensor::beginWarmup()
+{
+    {
+        std::lock_guard<std::mutex> lock(_sw_ae_mutex);
         int current = _sw_ae.config().max_exposure;
         try
         {
@@ -230,7 +263,8 @@ void RosSensor::startSwAutoExposure()
         // yellow image the white balance cannot correct) and half the brightness at the same
         // exposure and gain (amr47 2026-11-12..14). So the firmware AE runs during the startup
         // holdoff and the software AE takes over after it. Set here, before the stream starts (or
-        // on a running stream when enabled at runtime): no control transfer during stream start.
+        // on a running stream when enabled at runtime, or when the colour stays broken despite the
+        // warm-up, see ColourCastWatch): no control transfer during stream start.
         // The gain read here is the user's (<module>.gain), the base of the gain ramp. If it is
         // still the gain a previous software AE session raised it to (enabled again at runtime),
         // that session's base is the user's.
@@ -266,23 +300,13 @@ void RosSensor::startSwAutoExposure()
             base_gain = previous_base_gain;
             _sw_ae_restore_gain = static_cast<float>(base_gain);
         }
-        start_exposure = _sw_ae.reset(current, base_gain);
         _sw_ae_applied = {current, base_gain};  // a value outside the limits is corrected after the holdoff
+        _sw_ae_pending.reset();
+        _sw_ae_rewarm = false;
         _sw_ae_holdoff_frames = kSwAeStartupFrames;
         _sw_ae_holdoff_start.reset();
-        _sw_ae_stop = false;
+        return _sw_ae.reset(current, base_gain);
     }
-    if (!_sw_ae_thread.joinable())
-        _sw_ae_thread = std::thread([this](){ swAutoExposureWorker(); });
-    _sw_ae_enabled = true;
-    _sw_ae_cv.notify_one();
-
-    const int start_gain = _sw_ae.gain();
-    ROS_INFO_STREAM("Software auto exposure on: target luma " << config.target_luma << ", exposure " << config.min_exposure
-                    << ".." << config.max_exposure
-                    << (_sw_ae.gainRamp() ? ", gain " + std::to_string(start_gain) + ".." + std::to_string(config.max_gain) : std::string())
-                    << ", starting at " << start_exposure << " after "
-                    << kSwAeStartupFrames << " frames / " << kSwAeStartupTime.count() / 1000.0 << " s of firmware auto exposure");
 }
 
 void RosSensor::swAutoExposureFrame(const rs2::frame& frame)
@@ -297,20 +321,20 @@ void RosSensor::swAutoExposureFrame(const rs2::frame& frame)
         case RS2_FORMAT_BGR8: layout = {3, 2, 1, 0}; break;
         case RS2_FORMAT_RGBA8: layout = {4, 0, 1, 2}; break;
         case RS2_FORMAT_BGRA8: layout = {4, 2, 1, 0}; break;
-        case RS2_FORMAT_YUYV: layout = {2, 0, 0, 0}; break;
-        case RS2_FORMAT_UYVY: layout = {2, 1, 1, 1}; break;
+        case RS2_FORMAT_YUYV: layout = kYuyvLayout; break;
+        case RS2_FORMAT_UYVY: layout = kUyvyLayout; break;
         default:
             RCLCPP_WARN_STREAM_ONCE(_logger, "Software auto exposure: colour format "
                 << rs2_format_to_string(video_frame.get_profile().format()) << " is not supported");
             return;
     }
-    const double luma = meanLuma(static_cast<const uint8_t*>(video_frame.get_data()), video_frame.get_width(),
-                                 video_frame.get_height(), video_frame.get_stride_in_bytes(), layout);
+    const ImageMeans means = imageMeans(static_cast<const uint8_t*>(video_frame.get_data()), video_frame.get_width(),
+                                        video_frame.get_height(), video_frame.get_stride_in_bytes(), layout);
+    const auto now = std::chrono::steady_clock::now();
 
     std::lock_guard<std::mutex> lock(_sw_ae_mutex);
     if (_sw_ae_holdoff_frames > 0)
     {
-        const auto now = std::chrono::steady_clock::now();
         if (!_sw_ae_holdoff_start)
             _sw_ae_holdoff_start = now;
         if (_sw_ae_holdoff_frames > 1)
@@ -318,6 +342,7 @@ void RosSensor::swAutoExposureFrame(const rs2::frame& frame)
         else if (now - *_sw_ae_holdoff_start >= kSwAeStartupTime)
         {
             _sw_ae_holdoff_frames = 0;
+            _sw_ae_colour_watch.warmupDone(now);
             if (_sw_ae_handover || _sw_ae.setting() != _sw_ae_applied)
             {
                 _sw_ae_pending = _sw_ae.setting();
@@ -326,9 +351,35 @@ void RosSensor::swAutoExposureFrame(const rs2::frame& frame)
         }
         return;
     }
-    if (const auto next = _sw_ae.addFrame(luma))
+    if (_sw_ae_rewarm_on_colour_cast)
     {
-        ROS_DEBUG_STREAM("Software auto exposure: luma " << luma << " -> exposure " << next->exposure << ", gain " << next->gain);
+        const auto event = _sw_ae_colour_watch.addFrame(now, means.colour);
+        const double blue_green = _sw_ae_colour_watch.blueGreen(), red_green = _sw_ae_colour_watch.redGreen();
+        switch (event)
+        {
+            case ColourCastWatch::Event::Rewarm:
+                ROS_WARN_STREAM("Software auto exposure: colour cast for " << ColourCastWatch::kHold.count()
+                                << " s (B/G " << blue_green << ", R/G " << red_green << ", normal about 1.0): running the firmware "
+                                << "auto exposure warm-up again (" << _sw_ae_colour_watch.rewarms() << " of "
+                                << ColourCastWatch::kMaxRewarms << ")");
+                _sw_ae_rewarm = true;  // the worker starts the warm-up (USB control transfers)
+                _sw_ae_cv.notify_one();
+                return;
+            case ColourCastWatch::Event::Cleared:
+                ROS_INFO_STREAM("Software auto exposure: colour back to normal after warm-up " << _sw_ae_colour_watch.rewarms()
+                                << " (B/G " << blue_green << ", R/G " << red_green << ")");
+                break;
+            case ColourCastWatch::Event::GiveUp:
+                ROS_WARN_STREAM("Software auto exposure: colour cast still there after " << ColourCastWatch::kMaxRewarms
+                                << " warm-ups (B/G " << blue_green << ", R/G " << red_green << "); a camera restart clears it");
+                break;
+            case ColourCastWatch::Event::None:
+                break;
+        }
+    }
+    if (const auto next = _sw_ae.addFrame(means.luma))
+    {
+        ROS_DEBUG_STREAM("Software auto exposure: luma " << means.luma << " -> exposure " << next->exposure << ", gain " << next->gain);
         _sw_ae_pending = next;
         _sw_ae_cv.notify_one();
     }
@@ -339,9 +390,17 @@ void RosSensor::swAutoExposureWorker()
     std::unique_lock<std::mutex> lock(_sw_ae_mutex);
     while (true)
     {
-        _sw_ae_cv.wait(lock, [this](){ return _sw_ae_stop || _sw_ae_pending.has_value(); });
+        _sw_ae_cv.wait(lock, [this](){ return _sw_ae_stop || _sw_ae_rewarm || _sw_ae_pending.has_value(); });
         if (_sw_ae_stop)
             return;
+        if (_sw_ae_rewarm)
+        {
+            // colour cast (swAutoExposureFrame): the same warm-up as at the start
+            lock.unlock();
+            beginWarmup();
+            lock.lock();
+            continue;
+        }
         const SwAutoExposureSetting setting = *_sw_ae_pending;
         const int exposure = setting.exposure;
         _sw_ae_pending.reset();
