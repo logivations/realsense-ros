@@ -316,6 +316,8 @@ namespace realsense2_camera
         double _color_freq_tolerance;
         unsigned int _frame_counter = 1;
         unsigned int _frames_to_skip = 0;
+        bool _convert_yuyv_to_rgb8 = false;
+        std::map<stream_index_pair, cv::Mat> _rgb8_from_yuyv;
 
         std::map<stream_index_pair, bool> _enable;
         bool _publish_tf;

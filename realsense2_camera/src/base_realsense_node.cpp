@@ -19,6 +19,7 @@
 #include <rclcpp/clock.hpp>
 #include <fstream>
 #include <image_publisher.h>
+#include <yuyv_to_rgb8.h>
 
 // Header files for disabling intra-process comms for static broadcaster.
 #include <rclcpp/publisher_options.hpp>
@@ -1066,6 +1067,13 @@ void BaseRealSenseNode::publishFrame(
             if (image_cv_matrix.empty() && fillCVMatImageAndReturnStatus(f, images, width, height, stream))
             {
                 image_cv_matrix = images[stream];
+            }
+
+            if (_convert_yuyv_to_rgb8 && stream_format == RS2_FORMAT_YUYV && !image_cv_matrix.empty())
+            {
+                yuyvToRgb8(image_cv_matrix, _rgb8_from_yuyv[stream]);
+                image_cv_matrix = _rgb8_from_yuyv[stream];
+                stream_format = RS2_FORMAT_RGB8;
             }
 
             // Prepare image topic to be published
