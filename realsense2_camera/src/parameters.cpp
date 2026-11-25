@@ -97,6 +97,12 @@ void BaseRealSenseNode::getParameters()
 
     _frames_to_skip = _color_fps / _publish_fps;
 
+    // With rgb_camera.color_format YUYV: publish the colour image as RGB8, converted here only for
+    // the published frames instead of by librealsense for every sensor frame (yuyv_to_rgb8.h).
+    param_name = std::string("convert_yuyv_to_rgb8");
+    _convert_yuyv_to_rgb8 = _parameters->setParam<bool>(param_name, false);
+    _parameters_names.push_back(param_name);
+
 #if defined (ACCELERATE_GPU_WITH_GLSL)
     param_name = std::string("accelerate_gpu_with_glsl");
      _parameters->setParam<bool>(param_name, false,

@@ -117,7 +117,7 @@ find_package(nav_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(diagnostic_updater REQUIRED)
-find_package(OpenCV REQUIRED COMPONENTS core)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc)
 find_package(fastrtps REQUIRED)  # TODO: LRS-1203 - This is a workaround, till librealsense2 cmake config will be fixed
 
 find_package(realsense2 2.56.0)
@@ -324,7 +324,7 @@ if(BUILD_TESTING)
           std_srvs
           std_msgs
        )
-       #target_link_libraries(${_test_name} name_of_local_library)
+       target_link_libraries(${_test_name} ${OpenCV_LIBS})
     endforeach()
   endforeach()
 
