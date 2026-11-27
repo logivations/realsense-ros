@@ -300,6 +300,28 @@ TEST(ColourCastWatch, BrokenColourAsksForAnotherWarmup)
     EXPECT_LE(events.front().first, settle_and_hold + 2 * std::chrono::duration<double>(ColourCastWatch::kBlock).count());
 }
 
+// wfal-amr2 2026-11-27: a milder cast, B/G 0.87-0.92 in front of the lift gate (one image per block
+// here, same pose). With 0.90 as the limit the blocks at 0.90-0.92 counted as healthy, reset the
+// hold and the camera kept the cast all day.
+TEST(ColourCastWatch, MildCastAsksForAnotherWarmup)
+{
+    const std::vector<std::pair<double, double>> blue_red_green{
+        {0.88, 0.98}, {0.88, 0.93}, {0.91, 0.95}, {0.91, 0.94}, {0.88, 0.86}, {0.90, 0.95},
+        {0.90, 0.94}, {0.91, 0.94}, {0.88, 0.86}, {0.92, 0.97}, {0.90, 0.93}, {0.90, 0.93}};
+    ColourCastWatch watch;
+    ColourCastWatch::Clock::time_point now{};
+    watch.warmupDone(now);
+    Events events;
+    for (int round = 0; round < 2; ++round)
+        for (const auto& [blue_green, red_green] : blue_red_green)
+        {
+            const auto block = feed(watch, now, 5.0, MeanColour{125.0 * red_green, 125.0, 125.0 * blue_green});
+            events.insert(events.end(), block.begin(), block.end());
+        }
+    ASSERT_FALSE(events.empty());
+    EXPECT_EQ(events.front().second, ColourCastWatch::Event::Rewarm);
+}
+
 // Warm light lowers B/G like the broken state but raises R/G; a healthy camera there must not
 // lose 8 s of exposure control to a warm-up.
 TEST(ColourCastWatch, WarmLightIsNotBrokenColour)

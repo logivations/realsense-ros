@@ -263,14 +263,15 @@ namespace realsense2_camera
     // Each block of frames is healthy (B/G at least kMaxBlueGreen), broken (B/G below it and R/G
     // below kMaxRedGreen) or tells nothing (warm light lowers B/G too but raises R/G; too dark or
     // saturated). Broken blocks for kHold, after kSettle since the last warm-up, ask for another
-    // warm-up, at most kMaxRewarms times per session. Thresholds from 3125 front images of four
-    // Westfalia AMRs (2026-08..11): broken session B/G 0.57-0.89 at R/G 0.62-0.97, healthy B/G
-    // >= 0.97 (1st percentile), warm light B/G 0.76 at R/G 1.10.
+    // warm-up, at most kMaxRewarms times per session. Thresholds from 3178 front images of four
+    // Westfalia AMRs (2026-08..11): broken sessions B/G 0.57-0.89 (wfal-amr3) and 0.58-0.92
+    // (wfal-amr2, milder) at R/G 0.62-0.98, healthy B/G >= 0.97 (1st percentile; 2 dim frames at a
+    // charger below 0.93), warm light B/G 0.76 at R/G 1.10.
     class ColourCastWatch
     {
     public:
         using Clock = std::chrono::steady_clock;
-        static constexpr double kMaxBlueGreen = 0.90;
+        static constexpr double kMaxBlueGreen = 0.93;
         static constexpr double kMaxRedGreen = 1.05;
         static constexpr double kMinGreen = 40.0;   // darker: noise
         static constexpr double kMaxGreen = 230.0;  // brighter: saturated
