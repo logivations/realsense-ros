@@ -117,6 +117,7 @@ namespace realsense2_camera
             void set_sensor_parameter_to_ros(rs2_option option);
             void registerSwAutoExposureParameters(const std::string& module_name);
             void startSwAutoExposure();
+            int beginWarmup();  // firmware AE on, holdoff armed; returns the exposure the software AE starts from
             void swAutoExposureFrame(const rs2::frame& frame);
             void swAutoExposureWorker();
             void stopSwAutoExposure();
@@ -156,6 +157,11 @@ namespace realsense2_camera
             SwAutoExposureSetting _sw_ae_applied{-1, -1};  // exposure (+ gain) the sensor has, as far as we know
             bool _sw_ae_handover = false;          // firmware AE warm-up running: hand over after the holdoff
             std::optional<float> _sw_ae_restore_gain;  // gain to set again when the firmware AE is switched off
+            // <module>.sw_auto_exposure.rewarm_on_colour_cast: another firmware AE warm-up when the
+            // images keep the broken colour ISP signature (ColourCastWatch).
+            std::atomic<bool> _sw_ae_rewarm_on_colour_cast{false};
+            ColourCastWatch _sw_ae_colour_watch;
+            bool _sw_ae_rewarm = false;            // worker: run beginWarmup again
             std::condition_variable _sw_ae_cv;
             std::thread _sw_ae_thread;             // set_option is a USB control transfer: kept off the frame callback
     };
